@@ -67,10 +67,6 @@ void GameUi::renderEngineCombo(const char* idLabel, ai::AgentSpec& spec) {
             && ImGui::Selectable(ai::engineLabel(E::Stockfish), spec.engine == E::Stockfish)) {
             spec.engine = E::Stockfish;
         }
-        if (catalog_.lc0
-            && ImGui::Selectable(ai::engineLabel(E::Lc0), spec.engine == E::Lc0)) {
-            spec.engine = E::Lc0;
-        }
         if (catalog_.berserk
             && ImGui::Selectable(ai::engineLabel(E::Berserk), spec.engine == E::Berserk)) {
             spec.engine = E::Berserk;

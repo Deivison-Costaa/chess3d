@@ -1,5 +1,6 @@
 #include "app/Application.h"
 #include "app/HeadlessRunner.h"
+#include "platform/PayloadBootstrap.h"
 
 #include <spdlog/spdlog.h>
 
@@ -25,6 +26,10 @@ int main(int argc, char** argv) {
     spdlog::set_level(spdlog::level::info);
 #endif
     spdlog::info("Chess3D — starting");
+
+    // Build empacotado do Windows: extrai assets+engines embutidos na 1ª execução.
+    // No-op em dev / Linux / AppImage.
+    chess3d::platform::bootstrapExtractPayload();
 
     int rc = 0;
 

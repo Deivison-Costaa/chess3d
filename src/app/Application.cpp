@@ -5,6 +5,7 @@
 #include "chess/Move.h"
 #include "chess/Notation.h"
 #include "core/BoardCoords.h"
+#include "platform/AssetPaths.h"
 #include "render/Picker.h"
 
 #include <GLFW/glfw3.h>
@@ -33,11 +34,7 @@ struct CameraBlockData {
 };
 
 std::filesystem::path assetPath(const char* relative) {
-#ifdef CHESS3D_ASSETS_DIR
-    return std::filesystem::path(CHESS3D_ASSETS_DIR) / relative;
-#else
-    return std::filesystem::path("assets") / relative;
-#endif
+    return platform::assetPath(relative);
 }
 
 // Asset novo (Chess.glb / generator Khronos glTF Blender I/O) traz a cena

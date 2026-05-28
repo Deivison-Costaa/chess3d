@@ -40,13 +40,36 @@
       "name": "ci-linux",
       "displayName": "CI Linux (GitHub Actions)",
       "inherits": "linux-gcc"
+    },
+    {
+      "name": "package-windows",
+      "displayName": "Package Windows (.exe auto-extraível, estático)",
+      "inherits": "windows-mingw",
+      "binaryDir": "${sourceDir}/build-package",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
+        "CHESS3D_PACKAGE": "ON",
+        "CHESS3D_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "package-linux",
+      "displayName": "Package Linux (binário p/ AppImage)",
+      "inherits": "linux-gcc",
+      "binaryDir": "${sourceDir}/build-package",
+      "cacheVariables": {
+        "CHESS3D_PACKAGE": "ON",
+        "CHESS3D_BUILD_TESTS": "OFF"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "windows-mingw", "configurePreset": "windows-mingw" },
-    { "name": "linux-gcc",     "configurePreset": "linux-gcc"     },
-    { "name": "ci-windows",    "configurePreset": "ci-windows"    },
-    { "name": "ci-linux",      "configurePreset": "ci-linux"      }
+    { "name": "windows-mingw",   "configurePreset": "windows-mingw"   },
+    { "name": "linux-gcc",       "configurePreset": "linux-gcc"       },
+    { "name": "ci-windows",      "configurePreset": "ci-windows"      },
+    { "name": "ci-linux",        "configurePreset": "ci-linux"        },
+    { "name": "package-windows", "configurePreset": "package-windows" },
+    { "name": "package-linux",   "configurePreset": "package-linux"   }
   ],
   "testPresets": [
     {

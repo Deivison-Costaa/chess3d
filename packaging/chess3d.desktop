@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Chess3D
+Comment=Xadrez 3D com IA (Stockfish / Berserk / Minimax)
+Exec=chess3d
+Icon=chess3d
+Categories=Game;BoardGame;
+Terminal=false

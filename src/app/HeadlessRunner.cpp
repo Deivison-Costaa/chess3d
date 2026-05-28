@@ -27,7 +27,6 @@ ai::AgentSpec agentSpecFromName(const std::string& name) {
         {"medium",    ai::AgentSpec::Engine::MinimaxMedium},
         {"hard",      ai::AgentSpec::Engine::MinimaxHard},
         {"stockfish", ai::AgentSpec::Engine::Stockfish},
-        {"lc0",       ai::AgentSpec::Engine::Lc0},
         {"berserk",   ai::AgentSpec::Engine::Berserk},
     };
     ai::AgentSpec spec;

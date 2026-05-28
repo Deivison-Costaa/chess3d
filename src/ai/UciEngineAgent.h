@@ -15,13 +15,13 @@
 
 namespace chess3d::ai {
 
-// Cliente UCI genérico — funciona com Stockfish, Lc0, Berserk, ou qualquer engine
+// Cliente UCI genérico — funciona com Stockfish, Berserk, ou qualquer engine
 // que fale o protocolo UCI. Comunica via pipes anônimos (Win32 ou POSIX) + uma
 // thread leitora para evitar deadlock quando o engine não responde.
 class UciEngineAgent : public Agent {
 public:
     // setOptions: pares (name, value) enviados como `setoption name <k> value <v>`
-    // no handshake (ex: {{"WeightsFile", ".../network.pb.gz"}} pra Lc0).
+    // no handshake (ex: {{"EvalFile", ".../berserk.nn"}} pra Berserk).
     // displayNameOverride: se vazio, usa o `id name` reportado pelo engine.
     explicit UciEngineAgent(std::filesystem::path enginePath,
                             std::string displayNameOverride = {},

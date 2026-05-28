@@ -1,0 +1,143 @@
+name: Release
+
+# Gera os artefatos auto-contidos:
+#   - Windows: chess3d.exe único auto-extraível (assets + engines embutidos)
+#   - Linux:   chess3d-x86_64.AppImage
+# Dispara em tags v* (cria a Release) ou manualmente (só os artifacts).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-cache
+
+jobs:
+  # ── Windows: .exe único auto-extraível (link estático) ──────────────────────
+  windows:
+    name: Windows (.exe auto-extraível)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-x64-mingw-static-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-x64-mingw-static-
+
+      - name: Create vcpkg binary cache dir
+        shell: bash
+        run: mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+
+      - name: Install MinGW + Ninja
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-cmake
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '5b1214315250939257ef5d62ecdcbca18cf4fb1c'
+
+      - name: Configure + Build (packaging)
+        shell: msys2 {0}
+        env:
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+        run: |
+          cmake -B build-package -S . -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=x64-mingw-static \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+            -DCHESS3D_PACKAGE=ON -DCHESS3D_BUILD_TESTS=OFF
+          cmake --build build-package --parallel
+
+      - name: Rename artifact
+        shell: bash
+        run: cp build-package/bin/chess3d.exe chess3d-windows-x86_64.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chess3d-windows
+          path: chess3d-windows-x86_64.exe
+
+  # ── Linux: AppImage ─────────────────────────────────────────────────────────
+  linux:
+    name: Linux (AppImage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-x64-linux-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-x64-linux-
+
+      - name: Create vcpkg binary cache dir
+        run: mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake pkg-config git curl file \
+            libgl-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '5b1214315250939257ef5d62ecdcbca18cf4fb1c'
+
+      - name: Configure + Build (packaging)
+        env:
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+        run: |
+          cmake -B build-package -S . -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=x64-linux \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCHESS3D_PACKAGE=ON -DCHESS3D_BUILD_TESTS=OFF
+          cmake --build build-package --parallel
+
+      - name: Build AppImage
+        run: |
+          chmod +x packaging/linux/*.sh
+          packaging/linux/build_appimage.sh \
+            build-package/bin/chess3d assets chess3d-x86_64.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chess3d-linux
+          path: chess3d-x86_64.AppImage
+
+  # ── Release: anexa os dois artefatos à tag ──────────────────────────────────
+  release:
+    name: Publish Release
+    needs: [windows, linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/chess3d-windows/chess3d-windows-x86_64.exe
+            dist/chess3d-linux/chess3d-x86_64.AppImage
+          generate_release_notes: true

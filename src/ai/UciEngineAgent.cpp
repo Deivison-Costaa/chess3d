@@ -169,7 +169,7 @@ bool UciEngineAgent::spawn(const std::filesystem::path& enginePath) {
         close(stdinPipe[0]); close(stdinPipe[1]);
         close(stdoutPipe[0]); close(stdoutPipe[1]);
 
-        // CWD = engine directory so relative weight paths work (e.g., Lc0).
+        // CWD = engine directory so relative net/eval paths work (e.g., Berserk).
         const auto dir = enginePath.parent_path();
         if (!dir.empty()) chdir(dir.string().c_str());
 

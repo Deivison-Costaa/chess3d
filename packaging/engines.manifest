@@ -1,0 +1,20 @@
+# Engines empacotadas — FONTE ÚNICA de versões/URLs.
+# Lido tanto pelo cmake/FetchEngines.cmake (Windows) quanto pelos scripts
+# packaging/linux/*.sh (Linux). Formato: KEY=VALUE, sem espaços, "source"-ável em bash.
+#
+# Para atualizar uma engine, troque a tag e as URLs aqui — nada mais precisa mudar.
+
+# ── Stockfish (GPLv3) — binários oficiais pré-compilados ──────────────────────
+STOCKFISH_TAG=sf_18
+STOCKFISH_WIN_URL=https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-windows-x86-64-avx2.zip
+STOCKFISH_LINUX_URL=https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-ubuntu-x86-64-avx2.tar
+
+# ── Berserk (GPLv3) — .exe pré-compilado p/ Windows; Linux compila do código ──
+BERSERK_TAG=14
+BERSERK_WIN_URL=https://github.com/jhonnold/berserk/releases/download/14/berserk-14-avx2.exe
+BERSERK_NET_URL=https://github.com/jhonnold/berserk/releases/download/14/berserk-9b84c340af7e.nn
+BERSERK_SRC_REPO=https://github.com/jhonnold/berserk.git
+
+# ── Textos de licença (GPLv3) p/ redistribuição ──────────────────────────────
+STOCKFISH_LICENSE_URL=https://raw.githubusercontent.com/official-stockfish/Stockfish/sf_18/Copying.txt
+BERSERK_LICENSE_URL=https://raw.githubusercontent.com/jhonnold/berserk/14/LICENSE

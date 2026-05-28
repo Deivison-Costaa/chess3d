@@ -9,7 +9,7 @@ namespace chess3d {
 struct HeadlessConfig {
     // mode: "ai-vs-ai", "human-vs-ai", "hotseat", "lan-host", "lan-client"
     std::string mode = "ai-vs-ai";
-    // engine names: "human", "easy", "medium", "hard", "stockfish", "lc0", "berserk"
+    // engine names: "human", "easy", "medium", "hard", "stockfish", "berserk"
     std::string white = "easy";
     std::string black = "easy";
 

@@ -1,0 +1,4 @@
+// Recurso gerado por configure_file() no build de packaging do Windows.
+// Embute o payload.zip (assets + engines) como RCDATA, extraído na 1ª execução
+// pelo PayloadBootstrap (src/platform/PayloadBootstrap.cpp).
+CHESS3D_PAYLOAD RCDATA "@_payload_zip@"

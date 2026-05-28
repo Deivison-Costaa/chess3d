@@ -260,13 +260,6 @@ std::unique_ptr<Agent> makeAgent(const AgentSpec& spec) {
             };
             return makeUci(cat.stockfishPath, "Stockfish 18", std::move(opts), spec.moveTimeMs, "Stockfish");
         }
-        case AgentSpec::Engine::Lc0: {
-            std::vector<std::pair<std::string,std::string>> opts = {
-                {"WeightsFile", cat.lc0WeightsPath.filename().string()},
-                {"Threads", "1"}, {"NNCacheSize", "2000000"},
-            };
-            return makeUci(cat.lc0ExePath, "Lc0", std::move(opts), spec.moveTimeMs, "Lc0");
-        }
         case AgentSpec::Engine::Berserk: {
             std::vector<std::pair<std::string,std::string>> opts = {
                 {"EvalFile", cat.berserkNetPath.string()},

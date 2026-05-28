@@ -42,11 +42,10 @@ struct AgentSpec {
         MinimaxMedium,
         MinimaxHard,
         Stockfish,
-        Lc0,
         Berserk,
     };
     Engine engine = Engine::MinimaxMedium;
-    int moveTimeMs = 1000;  // só usado em engines UCI (Stockfish/Lc0/Berserk)
+    int moveTimeMs = 1000;  // só usado em engines UCI (Stockfish/Berserk)
 };
 
 inline const char* engineLabel(AgentSpec::Engine e) {
@@ -55,7 +54,6 @@ inline const char* engineLabel(AgentSpec::Engine e) {
         case AgentSpec::Engine::MinimaxMedium: return "Minimax Medio";
         case AgentSpec::Engine::MinimaxHard:   return "Minimax Dificil";
         case AgentSpec::Engine::Stockfish:     return "Stockfish 18";
-        case AgentSpec::Engine::Lc0:           return "Leela Chess Zero";
         case AgentSpec::Engine::Berserk:       return "Berserk 14";
     }
     return "?";
@@ -63,7 +61,6 @@ inline const char* engineLabel(AgentSpec::Engine e) {
 
 inline bool isUciEngine(AgentSpec::Engine e) {
     return e == AgentSpec::Engine::Stockfish
-        || e == AgentSpec::Engine::Lc0
         || e == AgentSpec::Engine::Berserk;
 }
 
