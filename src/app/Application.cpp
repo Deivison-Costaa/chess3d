@@ -67,6 +67,14 @@ Application::Application()
 
     input_.attach(window_.handle(), &camera_);
     input_.setOnLeftClick([this](double x, double y) { onClickAt(x, y); });
+    input_.setOnGameKey([this](int key) {
+        switch (key) {
+            case GLFW_KEY_7: setDifficulty(ai::Difficulty::Easy);   break;
+            case GLFW_KEY_8: setDifficulty(ai::Difficulty::Medium); break;
+            case GLFW_KEY_9: setDifficulty(ai::Difficulty::Hard);   break;
+            default: break;
+        }
+    });
 
     litShader_ = Shader(assetPath("shaders/lit.vert"), assetPath("shaders/lit.frag"));
     highlightShader_ = Shader(assetPath("shaders/highlight.vert"),
@@ -102,9 +110,22 @@ Application::Application()
     refreshLegalMoves();
     animator_.initFromBoard(board_);
 
-    aiAgent_ = std::make_unique<ai::MinimaxAgent>(2);
     aiColor_ = chess::Color::Black;
-    spdlog::info("AI: {} jogando com {}", aiAgent_->name(),
+    setDifficulty(ai::Difficulty::Medium);
+}
+
+void Application::setDifficulty(ai::Difficulty d) {
+    aiDifficulty_ = d;
+    aiAgent_ = ai::makeAgent(d);
+    const char* label = "?";
+    switch (d) {
+        case ai::Difficulty::Easy:   label = "Easy";   break;
+        case ai::Difficulty::Medium: label = "Medium"; break;
+        case ai::Difficulty::Hard:   label = "Hard";   break;
+        case ai::Difficulty::Master: label = "Master"; break;
+    }
+    spdlog::info("AI: {} (level={}) jogando com {}",
+                 aiAgent_->name(), label,
                  aiColor_ == chess::Color::White ? "white" : "black");
 }
 

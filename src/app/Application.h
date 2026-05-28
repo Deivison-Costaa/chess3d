@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ai/Agent.h"
+#include "ai/DifficultyLevels.h"
 #include "anim/Animator.h"
 #include "app/Window.h"
 #include "chess/Board.h"
@@ -38,6 +39,7 @@ private:
     void refreshLegalMoves();
     void applyMove(const chess::Move& m);
     void maybeTriggerAi();
+    void setDifficulty(ai::Difficulty d);
 
     Window window_;
     Camera camera_;
@@ -66,6 +68,7 @@ private:
 
     std::unique_ptr<ai::Agent> aiAgent_;
     chess::Color aiColor_ = chess::Color::Black;
+    ai::Difficulty aiDifficulty_ = ai::Difficulty::Medium;
 
     GLuint cameraUbo_ = 0;
 };

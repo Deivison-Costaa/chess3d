@@ -91,15 +91,17 @@ void InputHandler::onScroll(double /*xoffset*/, double yoffset) {
 
 void InputHandler::onKey(int key, int /*scancode*/, int action, int /*mods*/) {
     if (action != GLFW_PRESS) return;
-    if (!camera_) return;
 
-    switch (key) {
-        case GLFW_KEY_R: camera_->reset(); break;
-        case GLFW_KEY_F: camera_->setTopDown(); break;
-        case GLFW_KEY_1: camera_->setSideView(true);  break;
-        case GLFW_KEY_2: camera_->setSideView(false); break;
-        default: break;
+    if (camera_) {
+        switch (key) {
+            case GLFW_KEY_R: camera_->reset(); return;
+            case GLFW_KEY_F: camera_->setTopDown(); return;
+            case GLFW_KEY_1: camera_->setSideView(true);  return;
+            case GLFW_KEY_2: camera_->setSideView(false); return;
+            default: break;
+        }
     }
+    if (onGameKey_) onGameKey_(key);
 }
 
 void InputHandler::mouseButtonThunk(GLFWwindow* w, int button, int action, int mods) {

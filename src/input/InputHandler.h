@@ -13,6 +13,7 @@ class Camera;
 class InputHandler {
 public:
     using ClickCallback = std::function<void(double mouseX, double mouseY)>;
+    using KeyCallback   = std::function<void(int key)>;
 
     InputHandler() = default;
 
@@ -22,6 +23,7 @@ public:
     bool isMouseCaptured() const { return draggingRotate_ || draggingPan_; }
 
     void setOnLeftClick(ClickCallback cb) { onLeftClick_ = std::move(cb); }
+    void setOnGameKey(KeyCallback cb)     { onGameKey_   = std::move(cb); }
 
 private:
     void onMouseButton(int button, int action, int mods);
@@ -45,6 +47,7 @@ private:
     glm::dvec2 lastCursor_{0.0};
 
     ClickCallback onLeftClick_;
+    KeyCallback   onGameKey_;
 
     float rotateSensitivity_ = 0.006f;
     float panSensitivity_ = 0.0015f;

@@ -59,6 +59,37 @@ TEST_CASE("AI — detecta mate em 1 (branca a mover)", "[ai]") {
     REQUIRE(chess::isCheckmate(b));
 }
 
+TEST_CASE("AI — alpha-beta + MVV-LVA reduz nos em >10x na posicao inicial", "[ai][pruning]") {
+    chess::Board b;
+    ai::EvaluatorConfig ec;
+    ec.usePsts = true;
+
+    ai::SearchConfig naive;
+    naive.depth = 4;
+    naive.useAlphaBeta = false;
+    naive.useMoveOrdering = false;
+    ai::MinimaxAgent naiveAgent(naive, ec);
+
+    ai::SearchConfig pruned;
+    pruned.depth = 4;
+    pruned.useAlphaBeta = true;
+    pruned.useMoveOrdering = true;
+    ai::MinimaxAgent prunedAgent(pruned, ec);
+
+    chess::Board copy = b;
+    naiveAgent.chooseMove(copy);
+    const auto naiveNodes = naiveAgent.lastInfo().nodesVisited;
+
+    chess::Board copy2 = b;
+    prunedAgent.chooseMove(copy2);
+    const auto prunedNodes = prunedAgent.lastInfo().nodesVisited;
+
+    INFO("naive nodes=" << naiveNodes << " pruned nodes=" << prunedNodes
+         << " ratio=" << (prunedNodes > 0 ? static_cast<double>(naiveNodes) / prunedNodes : 0.0));
+    REQUIRE(prunedNodes > 0);
+    REQUIRE(naiveNodes > prunedNodes * 10);  // pelo menos 10x menos
+}
+
 TEST_CASE("AI vs AI — 5 partidas terminam sem crash e com resultado valido", "[ai][game]") {
     for (int trial = 0; trial < 5; ++trial) {
         chess::Board b;
