@@ -13,15 +13,16 @@ using namespace chess3d;
 namespace {
 
 bool isLegalIn(const chess::Move& m, const chess::MoveList& legal) {
-    for (std::size_t i = 0; i < legal.size(); ++i) {
+    for (std::size_t i = 0; i < legal.size(); ++i)
         if (legal[i] == m) return true;
-    }
     return false;
 }
 
 }  // namespace
 
-TEST_CASE("AI — sempre retorna movimento legal na posicao inicial", "[ai]") {
+// ---- Sanity ----------------------------------------------------------------
+
+TEST_CASE("AI always returns legal move from starting position", "[ai]") {
     chess::Board b;
     ai::MinimaxAgent agent(2);
     chess::Move m = agent.chooseMove(b);
@@ -30,36 +31,82 @@ TEST_CASE("AI — sempre retorna movimento legal na posicao inicial", "[ai]") {
     REQUIRE(isLegalIn(m, legal));
 }
 
-TEST_CASE("AI — captura material livre (rainha empilhada)", "[ai]") {
+TEST_CASE("AI captures free material queen undefended", "[ai]") {
     chess::Board b;
-    // Pretas a mover, rainha branca no e4 sem defesa, peão preto em d5 pode capturá-la.
+    // Pretas a mover, rainha branca no e4 sem defesa, peao preto em d5 pode captura-la.
     REQUIRE(b.loadFen("4k3/8/8/3p4/4Q3/8/8/4K3 b - - 0 1"));
     ai::MinimaxAgent agent(2);
     const chess::Move m = agent.chooseMove(b);
-    // Esperado: ...dxe4 captura
     REQUIRE(m.from == chess::makeSquare(3, 4));  // d5
     REQUIRE(m.to   == chess::makeSquare(4, 3));  // e4
     REQUIRE(m.isCapture());
 }
 
-TEST_CASE("AI — detecta mate em 1 (branca a mover)", "[ai]") {
+TEST_CASE("AI detects mate in 1", "[ai]") {
     chess::Board b;
-    // Mate clássico: Qxh7# em posição preparada.
-    // Posição: rei preto em h8, peão preto em g7 (somente saída bloqueada), rainha branca em h5,
-    // bispo branco em c4 mira f7 (não-essencial). 1.Qxh7# (peão g7 defende mas Qh7 atacada por Kg8? não, rei em h8)
-    // Vamos usar uma posição mais simples:
-    // Rei preto em h8, rainha branca em g6, rei branco em f6: 1.Qg7#  e 1.Qg8#  e 1.Qh7#
     REQUIRE(b.loadFen("7k/8/5KQ1/8/8/8/8/8 w - - 0 1"));
     ai::MinimaxAgent agent(2);
     const chess::Move m = agent.chooseMove(b);
-
-    // Aplica a jogada da IA e verifica que resultou em mate.
     chess::UndoInfo undo;
     b.makeMove(m, undo);
     REQUIRE(chess::isCheckmate(b));
 }
 
-TEST_CASE("AI — alpha-beta + MVV-LVA reduz nos em >10x na posicao inicial", "[ai][pruning]") {
+// ---- Mate em no maximo 2 ---------------------------------------------------
+
+TEST_CASE("AI depth 4 finds mate in at most 2 moves", "[ai][mate2]") {
+    chess::Board b;
+    // "1k6/8/1KR5/8/8/8/8/8": Kb8, Kb6 (brancas), Rc6.
+    // 1.Rc8# e mate direto (M1), ou a IA encontra outro caminho.
+    // O teste aceita tanto M1 (pos lance branco ja e mate)
+    // quanto M2 (mate apos resposta preta).
+    REQUIRE(b.loadFen("1k6/8/1KR5/8/8/8/8/8 w - - 0 1"));
+    ai::MinimaxAgent agent(4);
+    const chess::Move m = agent.chooseMove(b);
+    REQUIRE_FALSE(m.isNull());
+
+    chess::UndoInfo undo1;
+    b.makeMove(m, undo1);
+
+    // Se ja e mate apos o primeiro lance (M1), aceita.
+    if (chess::isCheckmate(b)) return;
+
+    // Nao deve ter dado stalemate.
+    REQUIRE_FALSE(chess::isStalemate(b));
+
+    // Resposta das pretas
+    ai::MinimaxAgent blackDef(4);
+    const chess::Move bm = blackDef.chooseMove(b);
+    if (bm.isNull()) return;  // sem movimentos => ja acabou
+    chess::UndoInfo undo2;
+    b.makeMove(bm, undo2);
+
+    // Brancas entregam o mate
+    ai::MinimaxAgent agent2(4);
+    const chess::Move m2 = agent2.chooseMove(b);
+    REQUIRE_FALSE(m2.isNull());
+    chess::UndoInfo undo3;
+    b.makeMove(m2, undo3);
+    REQUIRE(chess::isCheckmate(b));
+}
+
+// ---- Promotion choice ------------------------------------------------------
+
+TEST_CASE("AI promotes to queen in clear promotion position", "[ai]") {
+    chess::Board b;
+    // Peao branco em e7, rei preto em h8, sem stalemate ao promover para rainha.
+    REQUIRE(b.loadFen("7k/4P3/8/8/8/8/8/4K3 w - - 0 1"));
+    ai::MinimaxAgent agent(2);
+    const chess::Move m = agent.chooseMove(b);
+    INFO("move: from=" << (int)m.from << " to=" << (int)m.to
+         << " promo=" << (int)m.promotion);
+    REQUIRE(m.isPromotion());
+    REQUIRE(m.promotion == chess::PieceType::Queen);
+}
+
+// ---- Alpha-beta pruning ----------------------------------------------------
+
+TEST_CASE("AI alpha-beta and MVV-LVA reduces nodes by more than 10x", "[ai][pruning]") {
     chess::Board b;
     ai::EvaluatorConfig ec;
     ec.usePsts = true;
@@ -87,10 +134,48 @@ TEST_CASE("AI — alpha-beta + MVV-LVA reduz nos em >10x na posicao inicial", "[
     INFO("naive nodes=" << naiveNodes << " pruned nodes=" << prunedNodes
          << " ratio=" << (prunedNodes > 0 ? static_cast<double>(naiveNodes) / prunedNodes : 0.0));
     REQUIRE(prunedNodes > 0);
-    REQUIRE(naiveNodes > prunedNodes * 10);  // pelo menos 10x menos
+    REQUIRE(naiveNodes > prunedNodes * 10);
 }
 
-TEST_CASE("AI vs AI — 5 partidas terminam sem crash e com resultado valido", "[ai][game]") {
+// ---- Depth efectividade ----------------------------------------------------
+
+TEST_CASE("AI depth 4 beats depth 2 in majority of games", "[ai][depth][slow]") {
+    int hardWins = 0;
+    for (int trial = 0; trial < 5; ++trial) {
+        chess::Board b;
+        std::vector<std::string> history;
+        history.push_back(chess::positionKey(b));
+
+        // Hard (depth 4, ordering) as white; Easy (depth 2) as black
+        ai::SearchConfig hCfg;
+        hCfg.depth = 4; hCfg.useAlphaBeta = true; hCfg.useMoveOrdering = true;
+        ai::MinimaxAgent white(hCfg, {});
+        ai::MinimaxAgent black(2);
+
+        chess::GameResult result = chess::GameResult::Ongoing;
+        int plies = 0;
+        constexpr int kMax = 200;
+
+        while (result == chess::GameResult::Ongoing && plies < kMax) {
+            auto& agent = (b.sideToMove() == chess::Color::White)
+                ? static_cast<ai::Agent&>(white) : static_cast<ai::Agent&>(black);
+            const chess::Move m = agent.chooseMove(b);
+            chess::MoveList legal; chess::generateLegalMoves(b, legal);
+            REQUIRE(isLegalIn(m, legal));
+            chess::UndoInfo undo; b.makeMove(m, undo);
+            history.push_back(chess::positionKey(b));
+            result = chess::evaluateGame(b, history);
+            ++plies;
+        }
+        if (result == chess::GameResult::WhiteWins) ++hardWins;
+    }
+    INFO("hardWins=" << hardWins << "/5");
+    REQUIRE(hardWins >= 3);
+}
+
+// ---- AI vs AI full games ---------------------------------------------------
+
+TEST_CASE("AI vs AI 5 games finish without crash and with valid result", "[ai][game]") {
     for (int trial = 0; trial < 5; ++trial) {
         chess::Board b;
         std::vector<std::string> history;
@@ -101,7 +186,7 @@ TEST_CASE("AI vs AI — 5 partidas terminam sem crash e com resultado valido", "
 
         chess::GameResult result = chess::GameResult::Ongoing;
         int plies = 0;
-        constexpr int kMaxPlies = 250;  // safety net (depth 2 pode entrar em ciclo)
+        constexpr int kMaxPlies = 250;
 
         while (result == chess::GameResult::Ongoing && plies < kMaxPlies) {
             ai::Agent& agent = (b.sideToMove() == chess::Color::White)
@@ -111,7 +196,7 @@ TEST_CASE("AI vs AI — 5 partidas terminam sem crash e com resultado valido", "
 
             chess::MoveList legal;
             chess::generateLegalMoves(b, legal);
-            REQUIRE(isLegalIn(m, legal));  // não alucina
+            REQUIRE(isLegalIn(m, legal));
 
             chess::UndoInfo undo;
             b.makeMove(m, undo);
@@ -120,7 +205,6 @@ TEST_CASE("AI vs AI — 5 partidas terminam sem crash e com resultado valido", "
             ++plies;
         }
 
-        // Verifica que terminou (com resultado real ou pelo safety net que ainda é "ongoing").
         INFO("trial=" << trial << " plies=" << plies
              << " result=" << chess::gameResultName(result));
         REQUIRE((result != chess::GameResult::Ongoing || plies >= kMaxPlies));

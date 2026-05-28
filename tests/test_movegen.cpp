@@ -48,7 +48,7 @@ TEST_CASE("Board FEN round-trip", "[board][fen]") {
     }
 }
 
-TEST_CASE("Perft — starting position", "[perft][slow]") {
+TEST_CASE("Perft starting position", "[perft][slow]") {
     // https://www.chessprogramming.org/Perft_Results
     constexpr PerftCase cases[] = {
         {1, 20},
@@ -60,8 +60,8 @@ TEST_CASE("Perft — starting position", "[perft][slow]") {
                   cases, std::size(cases));
 }
 
-TEST_CASE("Perft — Kiwipete (position 2)", "[perft][slow]") {
-    // Posição clássica que cobre roque, en passant e capturas com promoção
+TEST_CASE("Perft Kiwipete position 2", "[perft][slow]") {
+    // Posicao classica que cobre roque, en passant e capturas com promocao
     constexpr PerftCase cases[] = {
         {1, 48},
         {2, 2039},
@@ -71,7 +71,7 @@ TEST_CASE("Perft — Kiwipete (position 2)", "[perft][slow]") {
                   cases, std::size(cases));
 }
 
-TEST_CASE("Perft — Position 3 (deep endgame with pawns)", "[perft][slow]") {
+TEST_CASE("Perft Position 3 deep endgame with pawns", "[perft][slow]") {
     constexpr PerftCase cases[] = {
         {1, 14},
         {2, 191},
@@ -82,7 +82,7 @@ TEST_CASE("Perft — Position 3 (deep endgame with pawns)", "[perft][slow]") {
                   cases, std::size(cases));
 }
 
-TEST_CASE("Perft — Position 4 (mirror of 5)", "[perft][slow]") {
+TEST_CASE("Perft Position 4 mirror of 5", "[perft][slow]") {
     constexpr PerftCase cases[] = {
         {1, 6},
         {2, 264},
@@ -92,15 +92,15 @@ TEST_CASE("Perft — Position 4 (mirror of 5)", "[perft][slow]") {
                   cases, std::size(cases));
 }
 
-TEST_CASE("Check detection — back-rank mate", "[rules]") {
+TEST_CASE("Check detection back-rank mate", "[rules]") {
     Board b;
     REQUIRE(b.loadFen("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1"));
-    // Ra8+ → xeque-mate
+    // Ra8+ => xeque-mate
     Move m{makeSquare(0, 0), makeSquare(0, 7), PieceType::None, MoveFlag::Quiet};
     UndoInfo undo;
     b.makeMove(m, undo);
     REQUIRE(b.inCheck(Color::Black));
     MoveList legal;
     generateLegalMoves(b, legal);
-    REQUIRE(legal.size() == 0);  // sem fugas — mate
+    REQUIRE(legal.size() == 0);  // sem fugas -- mate
 }

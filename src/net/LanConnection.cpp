@@ -18,7 +18,7 @@ namespace {
 using SockT   = SOCKET;
 constexpr SockT kInvalidSock = INVALID_SOCKET;
 inline bool sockValid(SockT s)  { return s != INVALID_SOCKET; }
-inline void sockClose(SockT s)  { closesocket(s); }
+inline void sockClose(SockT s)  { shutdown(s, SD_BOTH); closesocket(s); }
 inline int  sockRecv(SockT s, void* buf, int len)
     { return recv(s, reinterpret_cast<char*>(buf), len, 0); }
 inline int  sockSend(SockT s, const void* buf, int len)
@@ -47,7 +47,7 @@ namespace {
 using SockT   = int;
 constexpr SockT kInvalidSock = -1;
 inline bool sockValid(SockT s)  { return s >= 0; }
-inline void sockClose(SockT s)  { ::close(s); }
+inline void sockClose(SockT s)  { ::shutdown(s, SHUT_RDWR); ::close(s); }
 inline int  sockRecv(SockT s, void* buf, int len)
     { return static_cast<int>(::recv(s, buf, static_cast<std::size_t>(len), 0)); }
 inline int  sockSend(SockT s, const void* buf, int len)
