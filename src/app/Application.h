@@ -3,6 +3,7 @@
 #include "app/Window.h"
 #include "input/InputHandler.h"
 #include "render/Camera.h"
+#include "render/GltfLoader.h"
 #include "render/Mesh.h"
 #include "render/Shader.h"
 
@@ -29,6 +30,10 @@ private:
     Shader litShader_;
     Mesh cubeMesh_;
     Mesh floorMesh_;
+
+    GltfLoader gltf_;
+    float gltfWorldScale_ = 1.0f;
+    glm::vec3 gltfWorldOffset_{0.0f};
 
     GLuint cameraUbo_ = 0;
 };
