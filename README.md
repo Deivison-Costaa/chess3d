@@ -51,6 +51,25 @@ cmake --build build
 > `assets/engines/`. Se ausentes, o jogo roda normalmente só com o Minimax interno.
 > Alternativamente: `sudo apt install stockfish` e adicione o path ao catálogo.
 
+## Como rodar
+
+Após o build, use os scripts na raiz do projeto:
+
+**Windows:**
+```bat
+run.bat
+```
+
+**Linux:**
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+No Windows o script adiciona `C:\msys64\mingw64\bin` ao PATH automaticamente,
+necessário para resolver as DLLs do MinGW (`libstdc++`, `libgcc`, `libwinpthread`).
+Qualquer argumento extra é repassado ao executável (ex: `run.bat --auto --max-plies 100`).
+
 ## Testes
 
 ```bash
