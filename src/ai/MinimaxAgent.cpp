@@ -172,6 +172,11 @@ chess::Move MinimaxAgent::chooseMove(chess::Board& board) {
         bestComplete = runDepth(search_.depth);
     }
 
+    // Se ID expirou antes de completar sequer uma iteração, usa o primeiro move disponível.
+    if (bestComplete.empty()) {
+        bestComplete.push_back({rootMoves[0], 0});
+    }
+
     // Top 5 e desempate aleatório entre os melhores
     info_.topCandidates.assign(bestComplete.begin(),
                                bestComplete.begin() + std::min<std::size_t>(5, bestComplete.size()));

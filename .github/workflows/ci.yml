@@ -106,11 +106,11 @@ jobs:
 
       # ── Unit tests (Catch2 fast) ───────────────────────────────────────────
       - name: Catch2 tests (fast)
-        run: ctest --test-dir build --output-on-failure -E "slow"
+        run: ctest --test-dir build --output-on-failure --label-exclude slow
 
       # ── Unit tests (slow perft) — optional ─────────────────────────────────
       - name: Catch2 tests (slow perft)
-        run: ctest --test-dir build --output-on-failure -R "slow" --timeout 300
+        run: ctest --test-dir build --output-on-failure -L slow --timeout 300
         continue-on-error: true   # perft may be too slow on shared runners
 
       # ── Headless smoke test ────────────────────────────────────────────────

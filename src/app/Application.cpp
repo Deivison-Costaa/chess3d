@@ -1011,7 +1011,16 @@ void Application::renderUi() {
         case ui::AppState::GameOver: {
             rebuildHudData();
             gameUi_.renderHud(hud_);
-            ai::Agent* dbgAgent = whiteAgent_ ? whiteAgent_.get() : blackAgent_.get();
+            // Mostra info do agente que jogou por último (quem deu mate/empate).
+            ai::Agent* dbgAgent = nullptr;
+            if (!played_.empty()) {
+                const chess::Color lastSide = played_.back().boardBefore.sideToMove();
+                dbgAgent = (lastSide == chess::Color::White) ? whiteAgent_.get() : blackAgent_.get();
+                if (!dbgAgent)
+                    dbgAgent = (lastSide == chess::Color::White) ? blackAgent_.get() : whiteAgent_.get();
+            } else {
+                dbgAgent = whiteAgent_ ? whiteAgent_.get() : blackAgent_.get();
+            }
             if (dbgAgent) gameUi_.renderDebugPanel(dbgAgent->lastInfo(), dbgAgent->name());
             gameUi_.renderEndGame(result_, static_cast<int>(played_.size()));
             break;
@@ -1183,7 +1192,7 @@ void Application::handleLobbyFrame() {
                 remoteColor_ = (humanColor_ == chess::Color::White) ? chess::Color::Black
                                                                     : chess::Color::White;
                 gotRole = true;
-            } else if (msg->rfind("START ", 0) == 0 || *msg == "START") {
+            } else if (msg->rfind("START ", 0) == 0) {
                 // Recebemos posição inicial — já é standard, ignora FEN alternativo por ora.
             } else if (msg->rfind("TC ", 0) == 0) {
                 // Tempo: ignorado nesta versão (sem relógio em LAN).

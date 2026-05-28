@@ -73,6 +73,9 @@ Shader::Shader(const std::filesystem::path& vertexPath, const std::filesystem::p
         spdlog::error("Shader link failed: {}", log.data());
         glDeleteProgram(program_);
         program_ = 0;
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        return;
     }
 
     glDetachShader(program_, vs);
@@ -80,10 +83,8 @@ Shader::Shader(const std::filesystem::path& vertexPath, const std::filesystem::p
     glDeleteShader(vs);
     glDeleteShader(fs);
 
-    if (program_) {
-        spdlog::debug("Shader: linked program {} from {} + {}", program_,
-                      vertexPath.filename().string(), fragmentPath.filename().string());
-    }
+    spdlog::debug("Shader: linked program {} from {} + {}", program_,
+                  vertexPath.filename().string(), fragmentPath.filename().string());
 }
 
 Shader::~Shader() {

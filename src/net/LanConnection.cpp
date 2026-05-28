@@ -275,7 +275,8 @@ void LanConnection::readerLoop() {
         uint8_t header[4] = {};
         if (!recvExact(header, 4)) break;
         const uint32_t payloadLen = readBE32(header);
-        if (payloadLen == 0 || payloadLen > 1024 * 1024) break;  // sanidade
+        if (payloadLen > 1024 * 1024) break;  // sanidade: rejeita frames gigantes
+        if (payloadLen == 0) continue;        // frame vazio (keepalive): ignorar
 
         std::string payload(payloadLen, '\0');
         if (!recvExact(payload.data(), static_cast<int>(payloadLen))) break;

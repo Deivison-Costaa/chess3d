@@ -95,7 +95,7 @@ void GameUi::renderMainMenu() {
     ImGui::TextColored(ImVec4(0.95f, 0.85f, 0.45f, 1.0f), "Chess3D");
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopFont();
-    ImGui::TextDisabled("Xadrez 3D com agentes inteligêntes");
+    ImGui::TextDisabled("Xadrez 3D com agentes inteligentes");
     ImGui::Separator();
     ImGui::Spacing();
 

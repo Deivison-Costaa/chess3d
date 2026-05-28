@@ -62,7 +62,6 @@ private:
     // ── LAN / Hotseat ──
     void sendMoveToPeer(const chess::Move& m);
     void handleLobbyFrame();     // transição Lobby→Playing via handshake
-    void drainNetworkMessages(); // processa fila de mensagens do peer em Playing
     void handleControlEvent(const std::string& ev);
     void closeLanConnection();   // cancel + close + join thread cliente
 

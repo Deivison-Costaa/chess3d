@@ -81,9 +81,9 @@ void savePgn(const std::string& path, const GameSession& session,
     f << "[Black \"" << cfg.black << "\"]\n";
     const auto r = session.result();
     const char* resultStr = "*";
-    if (r == chess::GameResult::WhiteWins || r == chess::GameResult::BlackWinsOnTime)
+    if (r == chess::GameResult::WhiteWins || r == chess::GameResult::WhiteWinsOnTime)
         resultStr = "1-0";
-    else if (r == chess::GameResult::BlackWins || r == chess::GameResult::WhiteWinsOnTime)
+    else if (r == chess::GameResult::BlackWins || r == chess::GameResult::BlackWinsOnTime)
         resultStr = "0-1";
     else if (r != chess::GameResult::Ongoing)
         resultStr = "1/2-1/2";

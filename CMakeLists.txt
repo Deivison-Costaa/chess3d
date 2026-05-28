@@ -83,7 +83,17 @@ if(CHESS3D_BUILD_TESTS)
         target_link_libraries(chess3d_tests PRIVATE chess3d_lib Catch2::Catch2WithMain)
         include(CTest)
         include(Catch)
-        catch_discover_tests(chess3d_tests)
+        # Testes rápidos (sem tag [slow])
+        catch_discover_tests(chess3d_tests
+            TEST_SPEC "~[slow]"
+            PROPERTIES LABELS "fast"
+        )
+        # Testes lentos (tag [slow] — perft, profundidade 4, etc.)
+        catch_discover_tests(chess3d_tests
+            TEST_SPEC "[slow]"
+            TEST_SUFFIX " [slow]"
+            PROPERTIES LABELS "slow"
+        )
     endif()
 endif()
 
