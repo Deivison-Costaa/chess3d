@@ -4,6 +4,8 @@
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/constants.hpp>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
 
 #include <cmath>
 
@@ -17,6 +19,10 @@ void InputHandler::attach(GLFWwindow* window, Camera* camera) {
     glfwSetCursorPosCallback(window_, &InputHandler::cursorPosThunk);
     glfwSetScrollCallback(window_, &InputHandler::scrollThunk);
     glfwSetKeyCallback(window_, &InputHandler::keyThunk);
+    // ImGui também precisa do char callback (para campos de texto) e do focus.
+    glfwSetCharCallback(window_, &ImGui_ImplGlfw_CharCallback);
+    glfwSetWindowFocusCallback(window_, &ImGui_ImplGlfw_WindowFocusCallback);
+    glfwSetCursorEnterCallback(window_, &ImGui_ImplGlfw_CursorEnterCallback);
 }
 
 void InputHandler::detach() {
@@ -105,24 +111,31 @@ void InputHandler::onKey(int key, int /*scancode*/, int action, int /*mods*/) {
 }
 
 void InputHandler::mouseButtonThunk(GLFWwindow* w, int button, int action, int mods) {
+    ImGui_ImplGlfw_MouseButtonCallback(w, button, action, mods);
+    if (ImGui::GetIO().WantCaptureMouse) return;
     if (auto* self = static_cast<InputHandler*>(glfwGetWindowUserPointer(w))) {
         self->onMouseButton(button, action, mods);
     }
 }
 
 void InputHandler::cursorPosThunk(GLFWwindow* w, double x, double y) {
+    ImGui_ImplGlfw_CursorPosCallback(w, x, y);
     if (auto* self = static_cast<InputHandler*>(glfwGetWindowUserPointer(w))) {
         self->onCursorPos(x, y);
     }
 }
 
 void InputHandler::scrollThunk(GLFWwindow* w, double x, double y) {
+    ImGui_ImplGlfw_ScrollCallback(w, x, y);
+    if (ImGui::GetIO().WantCaptureMouse) return;
     if (auto* self = static_cast<InputHandler*>(glfwGetWindowUserPointer(w))) {
         self->onScroll(x, y);
     }
 }
 
 void InputHandler::keyThunk(GLFWwindow* w, int key, int sc, int action, int mods) {
+    ImGui_ImplGlfw_KeyCallback(w, key, sc, action, mods);
+    if (ImGui::GetIO().WantCaptureKeyboard) return;
     if (auto* self = static_cast<InputHandler*>(glfwGetWindowUserPointer(w))) {
         self->onKey(key, sc, action, mods);
     }

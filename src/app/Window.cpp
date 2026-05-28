@@ -2,6 +2,9 @@
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 #include <spdlog/spdlog.h>
 
 namespace chess3d {
@@ -94,14 +97,55 @@ Window::Window(const WindowSpec& spec) {
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     glEnable(GL_MULTISAMPLE);
+
+    // ImGui setup
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    ImGui::StyleColorsDark();
+    auto& style = ImGui::GetStyle();
+    style.WindowRounding = 6.0f;
+    style.FrameRounding = 4.0f;
+    style.ScrollbarRounding = 6.0f;
+    // install_callbacks=false: vamos chamar os callbacks do ImGui manualmente
+    // a partir dos thunks do InputHandler para não sobrescrevê-los depois.
+    ImGui_ImplGlfw_InitForOpenGL(handle_, false);
+    ImGui_ImplOpenGL3_Init("#version 460 core");
+    imguiInitialised_ = true;
+    spdlog::debug("ImGui initialised");
 }
 
 Window::~Window() {
+    if (imguiInitialised_) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+    }
     if (handle_) glfwDestroyWindow(handle_);
     if (glfwOwned_) {
         glfwTerminate();
         gGlfwInitialised = false;
     }
+}
+
+void Window::beginImGuiFrame() {
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+}
+
+void Window::endImGuiFrame() {
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+bool Window::imguiWantsMouse() const {
+    return imguiInitialised_ && ImGui::GetIO().WantCaptureMouse;
+}
+
+bool Window::imguiWantsKeyboard() const {
+    return imguiInitialised_ && ImGui::GetIO().WantCaptureKeyboard;
 }
 
 bool Window::shouldClose() const {

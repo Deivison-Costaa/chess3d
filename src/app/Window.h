@@ -34,9 +34,15 @@ public:
     int height() const;
     float aspect() const;
 
+    void beginImGuiFrame();
+    void endImGuiFrame();
+    bool imguiWantsMouse() const;
+    bool imguiWantsKeyboard() const;
+
 private:
     GLFWwindow* handle_ = nullptr;
     bool glfwOwned_ = false;
+    bool imguiInitialised_ = false;
 };
 
 }  // namespace chess3d
