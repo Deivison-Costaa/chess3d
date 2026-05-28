@@ -30,9 +30,11 @@ public:
     void swap();
     void pollEvents();
 
-    int width() const;
+    int width() const;       // framebuffer width (pixels) — para viewport/GL
     int height() const;
     float aspect() const;
+    int windowWidth() const;  // logical width — para NDC com cursor de glfwGetCursorPos
+    int windowHeight() const;
 
     void beginImGuiFrame();
     void endImGuiFrame();

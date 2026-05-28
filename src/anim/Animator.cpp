@@ -148,6 +148,27 @@ void Animator::animateMove(const chess::Move& move, const chess::Board& boardBef
     }
 }
 
+void Animator::animateKingFall(chess::Color loserColor) {
+    for (auto& v : pieces_) {
+        if (!v.alive) continue;
+        if (v.type != chess::PieceType::King) continue;
+        if (v.color != loserColor) continue;
+        Tween t;
+        t.pieceId = v.id;
+        t.startDelay = 0.4f;  // pausa breve antes da queda
+        t.duration = 1.0f;
+        t.fromPos = v.worldPos;
+        t.toPos = v.worldPos;
+        t.fromYaw = v.yawDeg;
+        t.toYaw = v.yawDeg;
+        t.fromPitch = v.pitchDeg;
+        t.toPitch = 90.0f;  // tomba 90° no eixo X
+        t.easing = &easeOutBounce;
+        tweens_.push_back(t);
+        break;
+    }
+}
+
 int Animator::spawnPiece(const VisualPiece& tpl) {
     VisualPiece v = tpl;
     v.id = nextId_++;
@@ -181,14 +202,15 @@ void Animator::update(float dt) {
             // arco parabólico h(t) = 4*H*t*(1-t)
             v->worldPos.y += 4.0f * t.arcHeight * raw * (1.0f - raw);
         }
-        v->yawDeg = glm::mix(t.fromYaw, t.toYaw, u);
-        v->scale  = glm::mix(t.fromScale, t.toScale, u);
-        v->alpha  = glm::mix(t.fromAlpha, t.toAlpha, u);
+        v->yawDeg   = glm::mix(t.fromYaw,   t.toYaw,   u);
+        v->pitchDeg = glm::mix(t.fromPitch, t.toPitch, u);
+        v->scale    = glm::mix(t.fromScale, t.toScale, u);
+        v->alpha    = glm::mix(t.fromAlpha, t.toAlpha, u);
 
         if (raw >= 1.0f) {
-            // Snap final + side-effects
             v->worldPos = t.toPos;
             v->yawDeg = t.toYaw;
+            v->pitchDeg = t.toPitch;
             v->scale = t.toScale;
             v->alpha = t.toAlpha;
             if (t.promoteAtEnd != chess::PieceType::None) {

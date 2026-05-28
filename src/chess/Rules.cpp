@@ -15,6 +15,8 @@ const char* gameResultName(GameResult r) {
         case GameResult::DrawFiftyMoveRule: return "1/2-1/2 (50 lances)";
         case GameResult::DrawInsufficientMaterial: return "1/2-1/2 (material insuficiente)";
         case GameResult::DrawThreefoldRepetition: return "1/2-1/2 (repeticao tripla)";
+        case GameResult::WhiteWinsOnTime: return "1-0 (tempo)";
+        case GameResult::BlackWinsOnTime: return "0-1 (tempo)";
     }
     return "?";
 }

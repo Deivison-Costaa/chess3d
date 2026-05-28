@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 
 #include <optional>
+#include <span>
 
 namespace chess3d {
 
@@ -16,7 +17,6 @@ std::optional<glm::vec3> rayPlaneHit(double mouseX,
                                      const glm::mat4& projection,
                                      float planeY);
 
-// Atalho: pixel → (file, rank) na grade do tabuleiro. Retorna {-1,-1} se fora.
 struct SquarePick {
     int file = -1;
     int rank = -1;
@@ -30,5 +30,26 @@ SquarePick pickSquare(double mouseX,
                       const glm::mat4& view,
                       const glm::mat4& projection,
                       float boardTopY = 0.0f);
+
+// Hitbox cilíndrica vertical para uma peça no tabuleiro.
+struct PieceHitbox {
+    int file;
+    int rank;
+    glm::vec3 baseCenter;  // posição no mundo do pé da peça
+    float radius;          // raio em XZ
+    float height;          // altura em Y
+};
+
+// Picking que prefere intersecao com cilindros (peças altas). Se nenhum cilindro
+// for atingido, cai pro plano do tabuleiro. Isso evita o problema de clicar
+// no corpo de um rei e o raio cair uma casa "atras" no plano.
+SquarePick pickSquareWithPieces(double mouseX,
+                                double mouseY,
+                                int fbWidth,
+                                int fbHeight,
+                                const glm::mat4& view,
+                                const glm::mat4& projection,
+                                std::span<const PieceHitbox> hitboxes,
+                                float boardTopY = 0.0f);
 
 }  // namespace chess3d

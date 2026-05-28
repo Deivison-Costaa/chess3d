@@ -5,12 +5,16 @@
 #include "Evaluator.h"
 #include "chess/MoveGenerator.h"
 
+#include <chrono>
+
 namespace chess3d::ai {
 
 struct SearchConfig {
     int depth = 2;
     bool useAlphaBeta = true;
     bool useMoveOrdering = false;  // MVV-LVA
+    bool useIterativeDeepening = false;
+    int timeLimitMs = 0;  // 0 = ilimitado (parar por depth apenas)
 };
 
 class MinimaxAgent : public Agent {
@@ -32,8 +36,14 @@ private:
     SearchConfig search_;
     Evaluator evaluator_;
     SearchInfo info_;
+
+    // Timeout interno: verificado a cada 4096 nós dentro de search().
+    std::chrono::steady_clock::time_point searchStart_;
+    bool searchAborted_ = false;
+    int nodesSinceCheck_ = 0;
 };
 
 std::unique_ptr<Agent> makeAgent(Difficulty d);
+std::unique_ptr<Agent> makeAgent(const AgentSpec& spec);
 
 }  // namespace chess3d::ai

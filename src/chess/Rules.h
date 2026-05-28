@@ -15,6 +15,8 @@ enum class GameResult : std::uint8_t {
     DrawFiftyMoveRule,
     DrawInsufficientMaterial,
     DrawThreefoldRepetition,
+    WhiteWinsOnTime,   // pretas zerou o relogio
+    BlackWinsOnTime,   // brancas zerou o relogio
 };
 
 const char* gameResultName(GameResult r);

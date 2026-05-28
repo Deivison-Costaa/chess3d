@@ -35,3 +35,12 @@ Thumbs.db
 
 # Local config
 CMakeUserPresets.json
+
+# ImGui saved layout
+imgui.ini
+
+# Loose upload files (not integrated assets)
+uploads_files_*.glb
+
+# Engines binaries (too large for git)
+assets/engines/

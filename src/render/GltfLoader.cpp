@@ -162,33 +162,92 @@ void processNode(const tinygltf::Model& model,
     if (node.mesh >= 0 && node.mesh < static_cast<int>(model.meshes.size())) {
         const auto& mesh = model.meshes[node.mesh];
 
-        std::vector<Vertex> verts;
-        std::vector<std::uint32_t> indices;
-        glm::vec3 bbMin(std::numeric_limits<float>::max());
-        glm::vec3 bbMax(std::numeric_limits<float>::lowest());
+        GltfMesh item;
+        item.name = !node.name.empty() ? node.name : mesh.name;
+        if (item.name.empty()) {
+            item.name = "unnamed_" + std::to_string(out.size());
+        }
+        item.nodeTransform = global;
 
+        glm::vec3 bbMinAll(std::numeric_limits<float>::max());
+        glm::vec3 bbMaxAll(std::numeric_limits<float>::lowest());
+        glm::vec2 uvMinAll( std::numeric_limits<float>::max());
+        glm::vec2 uvMaxAll(-std::numeric_limits<float>::max());
+
+        // Primeira passada — coleta verts + checa se UVs originais são degeneradas.
+        struct Built {
+            std::vector<Vertex> verts;
+            std::vector<std::uint32_t> indices;
+            int materialIndex = -1;
+            glm::vec3 bbMin, bbMax;
+        };
+        std::vector<Built> builts;
         for (const auto& prim : mesh.primitives) {
-            buildMeshFromPrimitive(model, prim, verts, indices, bbMin, bbMax);
+            Built b;
+            b.bbMin = glm::vec3(std::numeric_limits<float>::max());
+            b.bbMax = glm::vec3(std::numeric_limits<float>::lowest());
+            if (!buildMeshFromPrimitive(model, prim, b.verts, b.indices, b.bbMin, b.bbMax)) continue;
+            if (b.verts.empty() || b.indices.empty()) continue;
+            b.materialIndex = prim.material;
+            for (const auto& v : b.verts) {
+                uvMinAll = glm::min(uvMinAll, v.uv);
+                uvMaxAll = glm::max(uvMaxAll, v.uv);
+            }
+            bbMinAll = glm::min(bbMinAll, b.bbMin);
+            bbMaxAll = glm::max(bbMaxAll, b.bbMax);
+            builts.push_back(std::move(b));
         }
 
-        if (!verts.empty() && !indices.empty()) {
-            GltfMesh item;
-            item.name = !node.name.empty() ? node.name : mesh.name;
-            if (item.name.empty()) {
-                item.name = "unnamed_" + std::to_string(out.size());
+        // Se UVs originais são degeneradas, geramos UVs cilíndricas (projeção Y) a
+        // partir da posição local. Faz peças sem unwrap (Queen/Knight/Pawn no asset
+        // Jaximus) amostrarem a região "interessante" do atlas de mármore — região
+        // [0, 0.5] em U (igual K/B/R), com a coordenada V no eixo vertical.
+        const glm::vec2 uvExtent = uvMaxAll - uvMinAll;
+        const bool degenerateUv = (uvExtent.x < 0.001f && uvExtent.y < 0.001f);
+        if (degenerateUv && !builts.empty()) {
+            const glm::vec3 bbMid = 0.5f * (bbMinAll + bbMaxAll);
+            const float yMin = bbMinAll.y;
+            const float ySpan = std::max(0.001f, bbMaxAll.y - bbMinAll.y);
+            constexpr float kTexUSpan = 0.5f;  // K/B/R usam U em [0, ~0.5..0.88]
+            for (auto& b : builts) {
+                for (auto& v : b.verts) {
+                    const glm::vec2 xz(v.position.x - bbMid.x, v.position.z - bbMid.z);
+                    const float angle = std::atan2(xz.y, xz.x);
+                    const float u = (angle / glm::pi<float>() * 0.5f + 0.5f) * kTexUSpan;
+                    const float vt = (v.position.y - yMin) / ySpan;
+                    v.uv = glm::vec2(u, vt);
+                }
             }
-            item.mesh = Mesh(std::span<const Vertex>(verts.data(), verts.size()),
-                             std::span<const std::uint32_t>(indices.data(), indices.size()));
-            item.bboxMin = bbMin;
-            item.bboxMax = bbMax;
-            item.nodeTransform = global;
+        }
 
-            // bbox transformada (aproximação: 8 cantos)
+        for (auto& b : builts) {
+            GltfSubMesh sub;
+            sub.mesh = Mesh(std::span<const Vertex>(b.verts.data(), b.verts.size()),
+                             std::span<const std::uint32_t>(b.indices.data(), b.indices.size()));
+            sub.materialIndex = b.materialIndex;
+            sub.bboxMin = b.bbMin;
+            sub.bboxMax = b.bbMax;
+            item.submeshes.push_back(std::move(sub));
+        }
+        // Log UV bbox por mesh (debug — pra entender se peças diferentes
+        // amostram regiões diferentes da textura).
+        if (!item.submeshes.empty()) {
+            // Após geração cilíndrica (se ativada), todas as meshes têm UVs válidas.
+            item.hasValidUvs = true;
+            spdlog::info("  '{}' uvBbox(orig)=({:.2f},{:.2f})..({:.2f},{:.2f}){}",
+                         item.name, uvMinAll.x, uvMinAll.y, uvMaxAll.x, uvMaxAll.y,
+                         degenerateUv ? " [generated cylindrical]" : "");
+        }
+
+        if (!item.submeshes.empty()) {
+            item.bboxMin = bbMinAll;
+            item.bboxMax = bbMaxAll;
+
             const glm::vec3 corners[8] = {
-                {bbMin.x, bbMin.y, bbMin.z}, {bbMax.x, bbMin.y, bbMin.z},
-                {bbMin.x, bbMax.y, bbMin.z}, {bbMax.x, bbMax.y, bbMin.z},
-                {bbMin.x, bbMin.y, bbMax.z}, {bbMax.x, bbMin.y, bbMax.z},
-                {bbMin.x, bbMax.y, bbMax.z}, {bbMax.x, bbMax.y, bbMax.z},
+                {bbMinAll.x, bbMinAll.y, bbMinAll.z}, {bbMaxAll.x, bbMinAll.y, bbMinAll.z},
+                {bbMinAll.x, bbMaxAll.y, bbMinAll.z}, {bbMaxAll.x, bbMaxAll.y, bbMinAll.z},
+                {bbMinAll.x, bbMinAll.y, bbMaxAll.z}, {bbMaxAll.x, bbMinAll.y, bbMaxAll.z},
+                {bbMinAll.x, bbMaxAll.y, bbMaxAll.z}, {bbMaxAll.x, bbMaxAll.y, bbMaxAll.z},
             };
             for (const auto& c : corners) {
                 const glm::vec3 w = glm::vec3(global * glm::vec4(c, 1.0f));
@@ -211,6 +270,8 @@ void processNode(const tinygltf::Model& model,
 bool GltfLoader::loadFromFile(const std::filesystem::path& path) {
     items_.clear();
     byName_.clear();
+    images_.clear();
+    materials_.clear();
     sceneBBoxMin_ = glm::vec3(std::numeric_limits<float>::max());
     sceneBBoxMax_ = glm::vec3(std::numeric_limits<float>::lowest());
     ok_ = false;
@@ -232,6 +293,50 @@ bool GltfLoader::loadFromFile(const std::filesystem::path& path) {
         return false;
     }
 
+    // Extrai imagens (já decodificadas pelo tinygltf via stb_image quando .glb).
+    images_.reserve(model.images.size());
+    for (const auto& img : model.images) {
+        GltfImage gi;
+        gi.width = img.width;
+        gi.height = img.height;
+        gi.channels = img.component;
+        gi.pixels = img.image;  // RGBA8 ou RGB8 dependendo da imagem
+        images_.push_back(std::move(gi));
+    }
+
+    // Resolve materiais: texture → image
+    auto resolveImageIdx = [&](int textureIdx) {
+        if (textureIdx < 0 || textureIdx >= static_cast<int>(model.textures.size())) return -1;
+        return model.textures[textureIdx].source;
+    };
+    materials_.reserve(model.materials.size());
+    for (const auto& mat : model.materials) {
+        GltfMaterial gm;
+        gm.name = mat.name;
+        gm.baseColorImage = resolveImageIdx(mat.pbrMetallicRoughness.baseColorTexture.index);
+        gm.normalImage    = resolveImageIdx(mat.normalTexture.index);
+        gm.metallicRoughnessImage = resolveImageIdx(mat.pbrMetallicRoughness.metallicRoughnessTexture.index);
+        const auto& bcf = mat.pbrMetallicRoughness.baseColorFactor;
+        if (bcf.size() == 4) {
+            gm.baseColorFactor = glm::vec4(static_cast<float>(bcf[0]),
+                                           static_cast<float>(bcf[1]),
+                                           static_cast<float>(bcf[2]),
+                                           static_cast<float>(bcf[3]));
+        }
+        gm.metallicFactor  = static_cast<float>(mat.pbrMetallicRoughness.metallicFactor);
+        gm.roughnessFactor = static_cast<float>(mat.pbrMetallicRoughness.roughnessFactor);
+        materials_.push_back(gm);
+    }
+
+    spdlog::info("GltfLoader: {} images, {} materials, ", images_.size(), materials_.size());
+    for (std::size_t i = 0; i < materials_.size(); ++i) {
+        const auto& m = materials_[i];
+        spdlog::info("  material[{}] '{}': base={} normal={} mr={} factor=({:.2f},{:.2f},{:.2f},{:.2f}) m={:.2f} r={:.2f}",
+                     i, m.name, m.baseColorImage, m.normalImage, m.metallicRoughnessImage,
+                     m.baseColorFactor.x, m.baseColorFactor.y, m.baseColorFactor.z, m.baseColorFactor.w,
+                     m.metallicFactor, m.roughnessFactor);
+    }
+
     const int sceneIdx = model.defaultScene >= 0 ? model.defaultScene : 0;
     if (model.scenes.empty()) {
         spdlog::error("GltfLoader: no scenes");
@@ -248,8 +353,13 @@ bool GltfLoader::loadFromFile(const std::filesystem::path& path) {
                  sceneBBoxMax_.x, sceneBBoxMax_.y, sceneBBoxMax_.z);
     for (std::size_t i = 0; i < items_.size(); ++i) {
         const auto& it = items_[i];
-        spdlog::info("  [{}] '{}' verts via bbox=({:.2f},{:.2f},{:.2f})..({:.2f},{:.2f},{:.2f})",
-                     i, it.name,
+        std::string mats;
+        for (const auto& sub : it.submeshes) {
+            if (!mats.empty()) mats += ",";
+            mats += std::to_string(sub.materialIndex);
+        }
+        spdlog::info("  [{}] '{}' subs={} mat=[{}] bbox=({:.2f},{:.2f},{:.2f})..({:.2f},{:.2f},{:.2f})",
+                     i, it.name, it.submeshes.size(), mats,
                      it.bboxMin.x, it.bboxMin.y, it.bboxMin.z,
                      it.bboxMax.x, it.bboxMax.y, it.bboxMax.z);
     }

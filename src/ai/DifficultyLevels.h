@@ -8,7 +8,7 @@ enum class Difficulty : std::uint8_t {
     Easy,    // depth 2, só material
     Medium,  // depth 4, material + PSTs
     Hard,    // depth 6, material + PSTs + mobilidade + ordering
-    Master,  // Stockfish UCI
+    Master,  // Stockfish UCI (mantido p/ compat com factory antigo)
 };
 
 struct DifficultyConfig {
@@ -32,6 +32,39 @@ constexpr DifficultyConfig configFor(Difficulty d) {
             return {0, false, false, false, false, 1000};
     }
     return {2, false, false, false, false, 0};
+}
+
+// Especificação genérica de qualquer agente (Minimax interno OU UCI externo).
+// Usado pela UI pra deixar o usuário escolher livremente cada lado.
+struct AgentSpec {
+    enum class Engine : std::uint8_t {
+        MinimaxEasy,
+        MinimaxMedium,
+        MinimaxHard,
+        Stockfish,
+        Lc0,
+        Berserk,
+    };
+    Engine engine = Engine::MinimaxMedium;
+    int moveTimeMs = 1000;  // só usado em engines UCI (Stockfish/Lc0/Berserk)
+};
+
+inline const char* engineLabel(AgentSpec::Engine e) {
+    switch (e) {
+        case AgentSpec::Engine::MinimaxEasy:   return "Minimax Facil";
+        case AgentSpec::Engine::MinimaxMedium: return "Minimax Medio";
+        case AgentSpec::Engine::MinimaxHard:   return "Minimax Dificil";
+        case AgentSpec::Engine::Stockfish:     return "Stockfish 18";
+        case AgentSpec::Engine::Lc0:           return "Leela Chess Zero";
+        case AgentSpec::Engine::Berserk:       return "Berserk 14";
+    }
+    return "?";
+}
+
+inline bool isUciEngine(AgentSpec::Engine e) {
+    return e == AgentSpec::Engine::Stockfish
+        || e == AgentSpec::Engine::Lc0
+        || e == AgentSpec::Engine::Berserk;
 }
 
 }  // namespace chess3d::ai

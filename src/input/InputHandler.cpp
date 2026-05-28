@@ -47,9 +47,13 @@ void InputHandler::onMouseButton(int button, int action, int /*mods*/) {
             leftPressed_ = true;
             leftMovedWhilePressed_ = false;
             leftPressPos_ = {x, y};
-            draggingRotate_ = false;  // só vira drag quando mover além da tolerância
+            leftPressTime_ = glfwGetTime();
+            draggingRotate_ = false;
         } else {  // GLFW_RELEASE
-            const bool wasClick = leftPressed_ && !leftMovedWhilePressed_;
+            const double held = glfwGetTime() - leftPressTime_;
+            // Clique = press curto OU movimento mínimo. Garante que tap rápido sempre clica.
+            const bool quickPress = (held < clickTimeTolerance_);
+            const bool wasClick = leftPressed_ && (!leftMovedWhilePressed_ || quickPress);
             leftPressed_ = false;
             draggingRotate_ = false;
             if (wasClick && onLeftClick_) onLeftClick_(x, y);
@@ -135,7 +139,15 @@ void InputHandler::scrollThunk(GLFWwindow* w, double x, double y) {
 
 void InputHandler::keyThunk(GLFWwindow* w, int key, int sc, int action, int mods) {
     ImGui_ImplGlfw_KeyCallback(w, key, sc, action, mods);
-    if (ImGui::GetIO().WantCaptureKeyboard) return;
+    // Bypass do WantCaptureKeyboard para teclas de debug/jogo — ImGui claim com
+    // NavEnableKeyboard pode bloquear F3/F4/P/T/7/8/9 mesmo sem ter input ativo.
+    const bool isDebugKey = (key == GLFW_KEY_F3 || key == GLFW_KEY_F4
+                          || key == GLFW_KEY_P  || key == GLFW_KEY_T
+                          || key == GLFW_KEY_7  || key == GLFW_KEY_8 || key == GLFW_KEY_9
+                          || key == GLFW_KEY_R  || key == GLFW_KEY_F
+                          || key == GLFW_KEY_1  || key == GLFW_KEY_2
+                          || key == GLFW_KEY_G  || key == GLFW_KEY_L);
+    if (!isDebugKey && ImGui::GetIO().WantCaptureKeyboard) return;
     if (auto* self = static_cast<InputHandler*>(glfwGetWindowUserPointer(w))) {
         self->onKey(key, sc, action, mods);
     }

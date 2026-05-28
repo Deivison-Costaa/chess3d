@@ -15,7 +15,10 @@ struct SearchInfo {
     std::uint64_t nodesVisited = 0;
     int evaluation = 0;  // em centipawns, POV do lado a mover
     std::chrono::microseconds elapsed{0};
-    std::vector<chess::Move> principalVariation;  // melhor sequência prevista
+    std::vector<chess::Move> principalVariation;
+
+    struct Candidate { chess::Move move; int score = 0; };
+    std::vector<Candidate> topCandidates;  // até 5, ordenados decrescente
 };
 
 class Agent {

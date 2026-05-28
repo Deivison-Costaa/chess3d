@@ -52,7 +52,13 @@ private:
     float rotateSensitivity_ = 0.006f;
     float panSensitivity_ = 0.0015f;
     float zoomStep_ = 1.10f;
-    float clickPixelTolerance_ = 4.0f;
+    // Press de menos de clickTimeTolerance_ + movimento < clickPixelTolerance_ vira clique;
+    // qualquer dos dois ultrapassar vira drag (rotacao). Press rapido sempre vira clique
+    // mesmo se houver pequeno jitter — eliminando o problema de clique falhar por tremor.
+    float clickPixelTolerance_ = 8.0f;
+    double clickTimeTolerance_ = 0.18;  // seg
+
+    double leftPressTime_ = 0.0;
 };
 
 }  // namespace chess3d

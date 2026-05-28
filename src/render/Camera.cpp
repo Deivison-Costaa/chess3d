@@ -45,7 +45,8 @@ void Camera::setTopDown() {
 }
 
 void Camera::setSideView(bool whiteSide) {
-    yaw_ = whiteSide ? 0.0f : glm::pi<float>();
+    // White está em -Z; câmera atrás do branco usa yaw=π. Preto em +Z usa yaw=0.
+    yaw_ = whiteSide ? glm::pi<float>() : 0.0f;
     pitch_ = glm::radians(20.0f);
 }
 
