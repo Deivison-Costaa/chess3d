@@ -17,7 +17,7 @@ void glfwErrorCallback(int code, const char* description) {
     spdlog::error("GLFW error {}: {}", code, description);
 }
 
-void APIENTRY glDebugCallback(GLenum /*source*/, GLenum type, GLuint id,
+void GLAPIENTRY glDebugCallback(GLenum /*source*/, GLenum type, GLuint id,
                               GLenum severity, GLsizei /*length*/,
                               const GLchar* message, const void* /*user*/) {
     if (id == 131185 || id == 131204) return;
@@ -179,6 +179,18 @@ int Window::height() const {
 float Window::aspect() const {
     const int h = height();
     return (h > 0) ? (static_cast<float>(width()) / static_cast<float>(h)) : 1.0f;
+}
+
+int Window::windowWidth() const {
+    int w = 0, h = 0;
+    if (handle_) glfwGetWindowSize(handle_, &w, &h);
+    return w;
+}
+
+int Window::windowHeight() const {
+    int w = 0, h = 0;
+    if (handle_) glfwGetWindowSize(handle_, &w, &h);
+    return h;
 }
 
 }  // namespace chess3d

@@ -47,13 +47,20 @@ target_include_directories(chess3d_lib ${CHESS3D_LIB_SCOPE}
     ${Stb_INCLUDE_DIR}
     ${TINYGLTF_INCLUDE_DIR}
 )
+find_package(Threads REQUIRED)
+
 target_link_libraries(chess3d_lib ${CHESS3D_LIB_SCOPE}
     glfw
     glad::glad
     glm::glm
     imgui::imgui
     spdlog::spdlog
+    Threads::Threads
 )
+
+if(WIN32)
+    target_link_libraries(chess3d_lib ${CHESS3D_LIB_SCOPE} ws2_32)
+endif()
 target_compile_definitions(chess3d_lib ${CHESS3D_LIB_SCOPE}
     GLFW_INCLUDE_NONE
     CHESS3D_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets"
