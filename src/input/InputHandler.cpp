@@ -37,7 +37,17 @@ void InputHandler::onMouseButton(int button, int action, int /*mods*/) {
     lastCursor_ = {x, y};
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        draggingRotate_ = (action == GLFW_PRESS);
+        if (action == GLFW_PRESS) {
+            leftPressed_ = true;
+            leftMovedWhilePressed_ = false;
+            leftPressPos_ = {x, y};
+            draggingRotate_ = false;  // só vira drag quando mover além da tolerância
+        } else {  // GLFW_RELEASE
+            const bool wasClick = leftPressed_ && !leftMovedWhilePressed_;
+            leftPressed_ = false;
+            draggingRotate_ = false;
+            if (wasClick && onLeftClick_) onLeftClick_(x, y);
+        }
     } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         draggingPan_ = (action == GLFW_PRESS);
     }
@@ -47,6 +57,16 @@ void InputHandler::onCursorPos(double xpos, double ypos) {
     const glm::dvec2 cur(xpos, ypos);
     const glm::dvec2 delta = cur - lastCursor_;
     lastCursor_ = cur;
+
+    // Esquerda: vira drag quando excede a tolerância de pixels.
+    if (leftPressed_ && !leftMovedWhilePressed_) {
+        const glm::dvec2 pd = cur - leftPressPos_;
+        if (std::abs(pd.x) > clickPixelTolerance_ || std::abs(pd.y) > clickPixelTolerance_) {
+            leftMovedWhilePressed_ = true;
+            draggingRotate_ = true;
+        }
+    }
+
     if (!camera_) return;
 
     if (draggingRotate_) {
