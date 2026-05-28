@@ -1,0 +1,37 @@
+# Build
+build/
+build-*/
+out/
+cmake-build-*/
+
+# vcpkg
+vcpkg_installed/
+.vcpkg-root
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.sln.iobj
+*.sln.ipdb
+
+# Compiler artifacts
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.obj
+*.o
+*.exp
+*.lib
+*.a
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+
+# Local config
+CMakeUserPresets.json
