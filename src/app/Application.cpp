@@ -99,6 +99,7 @@ Application::Application()
     positionHistory_.clear();
     positionHistory_.push_back(chess::positionKey(board_));
     refreshLegalMoves();
+    animator_.initFromBoard(board_);
 }
 
 Application::~Application() {
@@ -119,11 +120,13 @@ void Application::refreshLegalMoves() {
 }
 
 void Application::applyMove(const chess::Move& m) {
+    chess::Board boardBefore = board_;  // snapshot para o Animator
     chess::UndoInfo undo;
     board_.makeMove(m, undo);
     lastMove_ = m;
     positionHistory_.push_back(chess::positionKey(board_));
     refreshLegalMoves();
+    animator_.animateMove(m, boardBefore);
     spdlog::info("Move: {} | side to move: {}",
                  chess::moveToUci(m),
                  board_.sideToMove() == chess::Color::White ? "white" : "black");
@@ -131,6 +134,7 @@ void Application::applyMove(const chess::Move& m) {
 
 void Application::onClickAt(double mouseX, double mouseY) {
     if (result_ != chess::GameResult::Ongoing) return;
+    if (animator_.isAnimating()) return;  // regra de ouro: bloqueia input enquanto anima
 
     const SquarePick pick = pickSquare(mouseX, mouseY,
                                        window_.width(), window_.height(),
@@ -199,29 +203,45 @@ void Application::renderPieces() {
         litShader_.setMat4("uModel", normalize);
         litShader_.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(normalize))));
         litShader_.setVec3("uAlbedo", glm::vec3(0.30f, 0.22f, 0.16f));
+        litShader_.setFloat("uAlpha", 1.0f);
         board->mesh.draw();
     }
 
-    // Peças do Board atual
-    for (chess::Square s = 0; s < 64; ++s) {
-        const chess::Piece p = board_.pieceAt(s);
-        if (p.empty()) continue;
-        const char* meshName = meshNameFor(p.type, p.color);
+    // Peças do Animator (estado visual, possivelmente em transição)
+    bool blendEnabled = false;
+    for (const auto& v : animator_.pieces()) {
+        if (!v.alive) continue;
+        const char* meshName = meshNameFor(v.type, v.color);
         if (!meshName) continue;
         const auto* item = gltf_.find(meshName);
         if (!item) continue;
 
-        const float yaw = (p.color == chess::Color::Black) ? 180.0f : 0.0f;
-        const int file = chess::fileOf(s);
-        const int rank = chess::rankOf(s);
         const glm::mat4 model =
-            glm::translate(glm::mat4(1.0f), squareToWorld(file, rank))
-            * glm::rotate(glm::mat4(1.0f), glm::radians(yaw), glm::vec3(0.0f, 1.0f, 0.0f))
-            * glm::scale(glm::mat4(1.0f), glm::vec3(gltfWorldScale_));
+            glm::translate(glm::mat4(1.0f), v.worldPos)
+            * glm::rotate(glm::mat4(1.0f), glm::radians(v.yawDeg), glm::vec3(0.0f, 1.0f, 0.0f))
+            * glm::scale(glm::mat4(1.0f), glm::vec3(gltfWorldScale_ * v.scale));
         litShader_.setMat4("uModel", model);
         litShader_.setMat3("uNormalMatrix", glm::mat3(glm::transpose(glm::inverse(model))));
-        litShader_.setVec3("uAlbedo", p.color == chess::Color::White ? kWhiteColor : kBlackColor);
+        glm::vec3 albedo = v.color == chess::Color::White ? kWhiteColor : kBlackColor;
+        litShader_.setVec3("uAlbedo", albedo);
+        litShader_.setFloat("uAlpha", v.alpha);
+        // Habilita blend quando peça está fadeando (captura).
+        const bool needsBlend = v.alpha < 0.999f;
+        if (needsBlend && !blendEnabled) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask(GL_FALSE);
+            blendEnabled = true;
+        } else if (!needsBlend && blendEnabled) {
+            glDisable(GL_BLEND);
+            glDepthMask(GL_TRUE);
+            blendEnabled = false;
+        }
         item->mesh.draw();
+    }
+    if (blendEnabled) {
+        glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
     }
 }
 
@@ -295,11 +315,19 @@ int Application::run() {
     if (!window_.ok()) return 1;
     spdlog::info("Chess3D — main loop (LMB seleciona/move, drag rotaciona, RMB pan, scroll zoom, R/F/1/2 câmera, ESC sai)");
 
+    lastFrameTime_ = static_cast<float>(glfwGetTime());
+
     while (!window_.shouldClose()) {
         window_.pollEvents();
         if (glfwGetKey(window_.handle(), GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             window_.setShouldClose(true);
         }
+
+        const float now = static_cast<float>(glfwGetTime());
+        const float dt = std::min(now - lastFrameTime_, 0.1f);  // cap em 100ms (evita salto após pausa)
+        lastFrameTime_ = now;
+        animator_.update(dt);
+
         glClearColor(0.07f, 0.09f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         renderScene(window_.aspect());

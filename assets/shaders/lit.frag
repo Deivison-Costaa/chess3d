@@ -11,6 +11,7 @@ layout(std140, binding = 0) uniform CameraBlock {
 };
 
 uniform vec3 uAlbedo = vec3(0.75, 0.55, 0.35);
+uniform float uAlpha = 1.0;
 uniform vec3 uLightDir = vec3(-0.4, -1.0, -0.3);
 uniform vec3 uLightColor = vec3(1.0, 0.97, 0.9);
 uniform float uAmbient = 0.18;
@@ -28,5 +29,5 @@ void main() {
     float spec = pow(max(dot(N, H), 0.0), uShininess) * step(0.0001, diff);
 
     vec3 color = uAlbedo * (uAmbient + diff * uLightColor) + spec * uLightColor * 0.4;
-    fragColor = vec4(color, 1.0);
+    fragColor = vec4(color, uAlpha);
 }

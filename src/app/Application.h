@@ -1,5 +1,6 @@
 #pragma once
 
+#include "anim/Animator.h"
 #include "app/Window.h"
 #include "chess/Board.h"
 #include "chess/MoveGenerator.h"
@@ -56,6 +57,9 @@ private:
 
     chess::Square selectedSquare_ = chess::kNoSquare;
     std::optional<chess::Move> lastMove_;
+
+    anim::Animator animator_;
+    float lastFrameTime_ = 0.0f;
 
     GLuint cameraUbo_ = 0;
 };
