@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ai/Agent.h"
 #include "anim/Animator.h"
 #include "app/Window.h"
 #include "chess/Board.h"
@@ -14,6 +15,7 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -35,6 +37,7 @@ private:
     void onClickAt(double mouseX, double mouseY);
     void refreshLegalMoves();
     void applyMove(const chess::Move& m);
+    void maybeTriggerAi();
 
     Window window_;
     Camera camera_;
@@ -60,6 +63,9 @@ private:
 
     anim::Animator animator_;
     float lastFrameTime_ = 0.0f;
+
+    std::unique_ptr<ai::Agent> aiAgent_;
+    chess::Color aiColor_ = chess::Color::Black;
 
     GLuint cameraUbo_ = 0;
 };

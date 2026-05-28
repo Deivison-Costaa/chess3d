@@ -1,5 +1,6 @@
 #include "Application.h"
 
+#include "ai/MinimaxAgent.h"
 #include "core/BoardCoords.h"
 #include "render/Picker.h"
 
@@ -100,6 +101,11 @@ Application::Application()
     positionHistory_.push_back(chess::positionKey(board_));
     refreshLegalMoves();
     animator_.initFromBoard(board_);
+
+    aiAgent_ = std::make_unique<ai::MinimaxAgent>(2);
+    aiColor_ = chess::Color::Black;
+    spdlog::info("AI: {} jogando com {}", aiAgent_->name(),
+                 aiColor_ == chess::Color::White ? "white" : "black");
 }
 
 Application::~Application() {
@@ -119,6 +125,24 @@ void Application::refreshLegalMoves() {
     }
 }
 
+void Application::maybeTriggerAi() {
+    if (!aiAgent_) return;
+    if (result_ != chess::GameResult::Ongoing) return;
+    if (animator_.isAnimating()) return;
+    if (board_.sideToMove() != aiColor_) return;
+
+    const chess::Move m = aiAgent_->chooseMove(board_);
+    if (m.isNull()) {
+        spdlog::warn("AI: chooseMove returned null move");
+        return;
+    }
+    const auto info = aiAgent_->lastInfo();
+    spdlog::info("AI move: {} (eval={} cp, nodes={}, time={} us)",
+                 chess::moveToUci(m), info.evaluation, info.nodesVisited,
+                 info.elapsed.count());
+    applyMove(m);
+}
+
 void Application::applyMove(const chess::Move& m) {
     chess::Board boardBefore = board_;  // snapshot para o Animator
     chess::UndoInfo undo;
@@ -135,6 +159,7 @@ void Application::applyMove(const chess::Move& m) {
 void Application::onClickAt(double mouseX, double mouseY) {
     if (result_ != chess::GameResult::Ongoing) return;
     if (animator_.isAnimating()) return;  // regra de ouro: bloqueia input enquanto anima
+    if (aiAgent_ && board_.sideToMove() == aiColor_) return;  // vez da IA
 
     const SquarePick pick = pickSquare(mouseX, mouseY,
                                        window_.width(), window_.height(),
@@ -327,6 +352,8 @@ int Application::run() {
         const float dt = std::min(now - lastFrameTime_, 0.1f);  // cap em 100ms (evita salto após pausa)
         lastFrameTime_ = now;
         animator_.update(dt);
+
+        maybeTriggerAi();
 
         glClearColor(0.07f, 0.09f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
