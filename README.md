@@ -20,6 +20,13 @@ Stockfish e Berserk). Não instala nada.
 As engines externas são GPLv3 (Stockfish, Berserk); os textos de licença
 acompanham o bundle em `THIRD_PARTY_LICENSES/`.
 
+## Documentação
+
+- 📐 **[Documentação técnica](docs/ARQUITETURA.md)** — módulos, tecnologias, build/distribuição,
+  testes e como o projeto foi construído com o Claude Code.
+- 🖥️ **[Slides de apresentação](docs/APRESENTACAO.md)** — deck (Marp) para apresentar o projeto.
+- 🏷️ **[Releases](https://github.com/Deivison-Costaa/chess3d/releases/tag/v0.1.0)** — binários prontos (Windows `.exe` + Linux AppImage).
+
 ## Build
 
 **Requisito de GPU:** OpenGL 4.6 (NVIDIA GTX 600+/RTX, AMD GCN 1.2+, Intel UHD 620+, Mesa 23+ no Linux).
