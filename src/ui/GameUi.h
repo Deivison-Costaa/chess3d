@@ -87,6 +87,8 @@ public:
     using PauseCb         = std::function<void(bool)>;
     using SpeedCb         = std::function<void(float)>;
     using CancelLobbyCb   = std::function<void()>;
+    using ResumeCb        = std::function<void()>;
+    using OpenPauseMenuCb = std::function<void()>;
 
     // Callbacks
     void setStartGame(StartGameCb cb)         { onStartGame_ = std::move(cb); }
@@ -98,15 +100,19 @@ public:
     void setPause(PauseCb cb)                 { onPause_ = std::move(cb); }
     void setSpeed(SpeedCb cb)                 { onSpeed_ = std::move(cb); }
     void setCancelLobby(CancelLobbyCb cb)     { onCancelLobby_ = std::move(cb); }
+    void setResume(ResumeCb cb)               { onResume_ = std::move(cb); }
+    void setOpenPauseMenu(OpenPauseMenuCb cb) { onOpenPauseMenu_ = std::move(cb); }
 
     void setEngineCatalog(const ai::EngineCatalog& c) { catalog_ = c; }
 
     void renderMainMenu();
     void renderLobby(const LobbyData& data);
     void renderHud(const HudData& data);
+    void renderPauseMenu(bool lanMode);
     void renderEndGame(chess::GameResult result, int totalPlies);
     void renderPromotionDialog(const PromotionRequest& req);
-    void renderDebugPanel(const ai::SearchInfo& info, const std::string& agentName);
+    void renderDebugPanel(const ai::SearchInfo& info, const std::string& agentName,
+                          chess::Color agentSide);
 
     GameSetup& setup() { return setup_; }
     const GameSetup& setup() const { return setup_; }
@@ -126,6 +132,8 @@ private:
     PauseCb         onPause_;
     SpeedCb         onSpeed_;
     CancelLobbyCb   onCancelLobby_;
+    ResumeCb        onResume_;
+    OpenPauseMenuCb onOpenPauseMenu_;
 
     GameSetup setup_;
     ai::EngineCatalog catalog_;

@@ -19,6 +19,7 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <deque>
 #include <future>
@@ -51,6 +52,7 @@ private:
     // ── Game flow ──
     void startNewGame(const ui::GameSetup& setup);
     void backToMenu();
+    void togglePauseMenu();
     void undoLastTurn();
 
     void refreshLegalMoves();
@@ -126,6 +128,13 @@ private:
     bool paused_ = false;
     float speedMultiplier_ = 1.0f;
 
+    // Checkbox "Animar lances" do menu. Quando off, as peças snapam direto.
+    bool animateMoves_ = true;
+
+    // Overlay de pausa em jogo (ESC / botão "Menu" do HUD). Independente de
+    // paused_, que é o pause do playback IA vs IA escolhido pelo usuário.
+    bool pauseMenuOpen_ = false;
+
     // Histórico p/ SAN + capturas + undo
     struct Played {
         chess::Move move;
@@ -156,8 +165,12 @@ private:
     ui::LobbyData lobbyData_;
     std::thread connectThread_;  // thread do cliente conectando
 
-    // Estado de handshake para o host aguardar HELLO do cliente.
-    bool handshakeDone_ = false;
+    // Handshake LAN incremental (processado por frame em handleLobbyFrame).
+    bool helloSent_    = false;  // já enviei minhas mensagens iniciais
+    bool gotPeerHello_ = false;  // recebi HELLO do oponente
+    bool gotRole_      = false;  // (cliente) recebi ROLE do host
+    std::chrono::steady_clock::time_point handshakeDeadline_{};
+    std::atomic<bool> connectFinished_{false};  // connectThread_ terminou (ok ou não)
 
     GLuint cameraUbo_ = 0;
 };

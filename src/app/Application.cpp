@@ -105,6 +105,15 @@ Application::Application()
     input_.attach(window_.handle(), &camera_);
     input_.setOnLeftClick([this](double x, double y) { onClickAt(x, y); });
     input_.setOnGameKey([this](int key) {
+        if (key == GLFW_KEY_ESCAPE) {
+            switch (state_) {
+                case ui::AppState::MainMenu: window_.setShouldClose(true); break;
+                case ui::AppState::Lobby:    backToMenu();                 break;
+                case ui::AppState::Playing:  togglePauseMenu();            break;
+                case ui::AppState::GameOver: backToMenu();                 break;
+            }
+            return;
+        }
         if (key == GLFW_KEY_F3) { gameUi_.toggleDebug(); return; }
         if (key == GLFW_KEY_T)  {
             usePbrTextures_ = !usePbrTextures_;
@@ -264,7 +273,9 @@ Application::Application()
     gameUi_.setUndo([this]() { undoLastTurn(); });
     gameUi_.setPause([this](bool p) { paused_ = p; });
     gameUi_.setSpeed([this](float s) { speedMultiplier_ = s; });
-    gameUi_.setCancelLobby([this]() { closeLanConnection(); state_ = ui::AppState::MainMenu; });
+    gameUi_.setCancelLobby([this]() { backToMenu(); });
+    gameUi_.setResume([this]() { pauseMenuOpen_ = false; });
+    gameUi_.setOpenPauseMenu([this]() { togglePauseMenu(); });
     gameUi_.setEngineCatalog(ai::EngineCatalog::detect());
 
     // Inicializa cena vazia (Menu) — Animator com tabuleiro padrão pra ficar bonito de fundo
@@ -309,8 +320,14 @@ void Application::startNewGame(const ui::GameSetup& setup) {
     lanMode_ = (setup.mode == ui::GameMode::LanHost || setup.mode == ui::GameMode::LanClient);
     isLanHost_ = (setup.mode == ui::GameMode::LanHost);
     paused_ = false;
+    pauseMenuOpen_ = false;
     speedMultiplier_ = 1.0f;
-    handshakeDone_ = false;
+    // Em LAN o checkbox não é exibido — força animação pra não herdar valor stale.
+    animateMoves_ = lanMode_ ? true : setup.animateAi;
+    helloSent_ = false;
+    gotPeerHello_ = false;
+    gotRole_ = false;
+    connectFinished_.store(false);
     remoteAgent_.reset();
     whiteTimeMs_ = -1;
     blackTimeMs_ = -1;
@@ -404,8 +421,9 @@ void Application::startNewGame(const ui::GameSetup& setup) {
         connectThread_ = std::thread([this, host, port]() {
             if (!connection_ || !connection_->connectTo(host, port)) {
                 spdlog::error("LAN client: falha ao conectar em {}:{}", host, port);
-                // Marca como erro — handleLobbyFrame vai perceber isConnected()==false
             }
+            // handleLobbyFrame usa connectFinished_ + isConnected() pra detectar falha.
+            connectFinished_.store(true);
         });
         spdlog::info("LAN client: conectando a {}:{}...", host, port);
     }
@@ -419,8 +437,14 @@ void Application::backToMenu() {
     closeLanConnection();
     lanMode_ = false;
     state_ = ui::AppState::MainMenu;
+    pauseMenuOpen_ = false;
     selectedSquare_ = chess::kNoSquare;
     pendingPromotion_.reset();
+}
+
+void Application::togglePauseMenu() {
+    if (state_ != ui::AppState::Playing) return;
+    pauseMenuOpen_ = !pauseMenuOpen_;
 }
 
 void Application::setDifficulty(ai::Difficulty d) {
@@ -488,7 +512,11 @@ void Application::applyMove(const chess::Move& m) {
         else                                       capturedByBlack_.push_back(captured);
     }
 
-    animator_.animateMove(m, boardBefore);
+    if (animateMoves_) {
+        animator_.animateMove(m, boardBefore);
+    } else {
+        animator_.initFromBoard(board_);  // snap: board_ já está pós-makeMove
+    }
 
     // Increment Fischer pro lado que acabou de jogar (em modos temporizados).
     if (incrementMs_ > 0) {
@@ -537,6 +565,7 @@ void Application::undoLastTurn() {
 
 void Application::onClickAt(double mouseX, double mouseY) {
     if (state_ != ui::AppState::Playing) return;
+    if (pauseMenuOpen_) return;
     if (animator_.isAnimating()) return;
     if (pendingPromotion_) return;
     if (window_.imguiWantsMouse()) return;
@@ -688,6 +717,11 @@ void Application::maybeTriggerAi() {
         applyMove(m);
         return;
     }
+
+    // Overlay de pausa segura novos cálculos (a coleta acima continua, pra não
+    // debitar do relógio o tempo parado). Em LAN não segura: o RemoteAgent
+    // precisa continuar recebendo o lance do oponente.
+    if (pauseMenuOpen_ && !lanMode_) return;
 
     // ── Lança cálculo em thread separada ─────────────────────────────────────
     aiInFlight_ = agentPtr;
@@ -995,13 +1029,21 @@ void Application::renderUi() {
             rebuildHudData();
             gameUi_.renderHud(hud_);
             // Debug panel mostra o último agente que pensou (lado a mover, ou último a jogar).
-            ai::Agent* dbgAgent = (board_.sideToMove() == chess::Color::White)
+            chess::Color dbgSide = board_.sideToMove();
+            ai::Agent* dbgAgent = (dbgSide == chess::Color::White)
                                 ? whiteAgent_.get() : blackAgent_.get();
-            if (!dbgAgent) dbgAgent = (board_.sideToMove() == chess::Color::White)
-                                    ? blackAgent_.get() : whiteAgent_.get();
-            if (dbgAgent) gameUi_.renderDebugPanel(dbgAgent->lastInfo(), dbgAgent->name());
+            if (!dbgAgent) {
+                dbgSide = (dbgSide == chess::Color::White) ? chess::Color::Black
+                                                           : chess::Color::White;
+                dbgAgent = (dbgSide == chess::Color::White) ? whiteAgent_.get()
+                                                            : blackAgent_.get();
+            }
+            if (dbgAgent) gameUi_.renderDebugPanel(dbgAgent->lastInfo(), dbgAgent->name(), dbgSide);
             if (pendingPromotion_) {
                 gameUi_.renderPromotionDialog(*pendingPromotion_);
+            }
+            if (pauseMenuOpen_) {
+                gameUi_.renderPauseMenu(lanMode_);
             }
             break;
         }
@@ -1010,15 +1052,21 @@ void Application::renderUi() {
             gameUi_.renderHud(hud_);
             // Mostra info do agente que jogou por último (quem deu mate/empate).
             ai::Agent* dbgAgent = nullptr;
+            chess::Color dbgSide = chess::Color::White;
             if (!played_.empty()) {
-                const chess::Color lastSide = played_.back().boardBefore.sideToMove();
-                dbgAgent = (lastSide == chess::Color::White) ? whiteAgent_.get() : blackAgent_.get();
-                if (!dbgAgent)
-                    dbgAgent = (lastSide == chess::Color::White) ? blackAgent_.get() : whiteAgent_.get();
+                dbgSide = played_.back().boardBefore.sideToMove();
+                dbgAgent = (dbgSide == chess::Color::White) ? whiteAgent_.get() : blackAgent_.get();
+                if (!dbgAgent) {
+                    dbgSide = (dbgSide == chess::Color::White) ? chess::Color::Black
+                                                               : chess::Color::White;
+                    dbgAgent = (dbgSide == chess::Color::White) ? whiteAgent_.get()
+                                                                : blackAgent_.get();
+                }
             } else {
+                dbgSide = whiteAgent_ ? chess::Color::White : chess::Color::Black;
                 dbgAgent = whiteAgent_ ? whiteAgent_.get() : blackAgent_.get();
             }
-            if (dbgAgent) gameUi_.renderDebugPanel(dbgAgent->lastInfo(), dbgAgent->name());
+            if (dbgAgent) gameUi_.renderDebugPanel(dbgAgent->lastInfo(), dbgAgent->name(), dbgSide);
             gameUi_.renderEndGame(result_, static_cast<int>(played_.size()));
             break;
         }
@@ -1034,14 +1082,7 @@ int Application::run() {
     while (!window_.shouldClose()) {
         const auto frameStart = std::chrono::steady_clock::now();
         window_.pollEvents();
-        if (glfwGetKey(window_.handle(), GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-            // ESC só fecha a partir do menu; em jogo, volta pro menu
-            if (state_ == ui::AppState::MainMenu) {
-                window_.setShouldClose(true);
-            } else {
-                backToMenu();
-            }
-        }
+        // ESC é tratado no callback de teclado (edge-triggered) — ver setOnGameKey.
 
         const float now = static_cast<float>(glfwGetTime());
         const float realDt = std::min(now - lastFrameTime_, 0.1f);
@@ -1064,7 +1105,8 @@ int Application::run() {
 
             // Tick do relógio do lado que tá pra mover (apenas se modo temporizado).
             // Suspende durante animação, diálogo de promoção e pause.
-            if (whiteTimeMs_ >= 0 && !animator_.isAnimating() && !pendingPromotion_ && !paused_) {
+            if (whiteTimeMs_ >= 0 && !animator_.isAnimating() && !pendingPromotion_
+                && !paused_ && !(pauseMenuOpen_ && !lanMode_)) {
                 const int dms = static_cast<int>(realDt * 1000.0f);
                 int& clock = (board_.sideToMove() == chess::Color::White) ? whiteTimeMs_ : blackTimeMs_;
                 clock = std::max(0, clock - dms);
@@ -1099,10 +1141,24 @@ int Application::run() {
 // ─── LAN helpers ─────────────────────────────────────────────────────────────
 
 void Application::closeLanConnection() {
+    // Ordem importa: cancelar/fechar ANTES dos joins/waits, senão a UI congela
+    // esperando um connect() ou um chooseMove() que nunca terminariam.
+    if (remoteAgent_) remoteAgent_->cancel();
+    if (connection_) connection_->close();  // aborta connect/accept/recv (≤~100ms)
     if (connectThread_.joinable()) connectThread_.join();
-    if (connection_) { connection_->close(); connection_.reset(); }
+    if (aiFuture_.valid()) { aiFuture_.wait(); aiFuture_ = {}; }
+    aiInFlight_.reset();
+    aiThinking_ = false;
+    // Limpa os aliases do RemoteAgent antes da conexão: ele guarda ponteiro cru
+    // pra LanConnection e não pode sobreviver a ela.
+    if (whiteAgent_ == remoteAgent_) whiteAgent_.reset();
+    if (blackAgent_ == remoteAgent_) blackAgent_.reset();
     remoteAgent_.reset();
-    handshakeDone_ = false;
+    connection_.reset();
+    helloSent_ = false;
+    gotPeerHello_ = false;
+    gotRole_ = false;
+    connectFinished_.store(false);
 }
 
 void Application::sendMoveToPeer(const chess::Move& m) {
@@ -1134,6 +1190,9 @@ void Application::handleControlEvent(const std::string& ev) {
 }
 
 // Handshake após conectar. Chamado a cada frame enquanto state_==Lobby.
+// Incremental: processa o que chegou neste frame e retorna — nunca bloqueia a
+// main thread. Falha de connect/handshake volta pro menu (nunca inicia Playing
+// em estado quebrado).
 void Application::handleLobbyFrame() {
     if (!connection_) {
         // Conexão não existe (erro de bind/connect): volta pro menu.
@@ -1143,62 +1202,59 @@ void Application::handleLobbyFrame() {
     }
 
     if (!connection_->isConnected()) {
-        // Ainda aguardando cliente (host) ou ainda conectando (client).
+        if (!isLanHost_ && connectFinished_.load()) {
+            // Cliente: a thread de connect terminou sem conectar.
+            spdlog::error("LAN: não foi possível conectar ao host");
+            backToMenu();
+            return;
+        }
+        // Host aguardando cliente / cliente ainda conectando.
         return;
     }
 
-    if (handshakeDone_) return;
-    handshakeDone_ = true;
-
-    if (isLanHost_) {
-        // Host envia o setup completo.
-        const std::string roleStr = (remoteColor_ == chess::Color::White) ? "WHITE" : "BLACK";
+    // Primeiro frame conectado: envia as mensagens iniciais e arma o deadline.
+    if (!helloSent_) {
+        helloSent_ = true;
+        handshakeDeadline_ = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         connection_->sendMessage("HELLO chess3d/1 " + myNick_);
-        connection_->sendMessage("ROLE " + roleStr);
-        connection_->sendMessage("START " + chess::Board().toFen());
-        connection_->sendMessage("TC -1 0");  // sem relógio por enquanto (LAN usa setup padrão)
+        if (isLanHost_) {
+            const std::string roleStr = (remoteColor_ == chess::Color::White) ? "WHITE" : "BLACK";
+            connection_->sendMessage("ROLE " + roleStr);
+            connection_->sendMessage("START " + chess::Board().toFen());
+            connection_->sendMessage("TC -1 0");  // sem relógio por enquanto (LAN usa setup padrão)
+        }
+    }
 
-        // Aguarda HELLO do cliente (polling rápido com timeout).
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        while (std::chrono::steady_clock::now() < deadline) {
-            auto msg = connection_->pollIncoming();
-            if (msg && msg->rfind("HELLO ", 0) == 0) {
-                const std::size_t sp = msg->find(' ', 6);
-                opponentNick_ = (sp != std::string::npos) ? msg->substr(sp + 1) : "cliente";
-                spdlog::info("LAN: cliente identificado como '{}'", opponentNick_);
-                break;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // Drena o que chegou neste frame.
+    while (auto msg = connection_->pollIncoming()) {
+        if (msg->rfind("HELLO ", 0) == 0) {
+            const std::size_t sp = msg->find(' ', 6);
+            opponentNick_ = (sp != std::string::npos) ? msg->substr(sp + 1)
+                                                      : (isLanHost_ ? "cliente" : "host");
+            gotPeerHello_ = true;
+            spdlog::info("LAN: oponente identificado como '{}'", opponentNick_);
+        } else if (msg->rfind("ROLE ", 0) == 0) {
+            const std::string role = msg->substr(5);
+            // ROLE = COR DO CLIENTE; humanColor_ = minha cor.
+            humanColor_ = (role == "WHITE") ? chess::Color::White : chess::Color::Black;
+            remoteColor_ = (humanColor_ == chess::Color::White) ? chess::Color::Black
+                                                                : chess::Color::White;
+            gotRole_ = true;
+        } else if (msg->rfind("START ", 0) == 0) {
+            // Recebemos posição inicial — já é standard, ignora FEN alternativo por ora.
+        } else if (msg->rfind("TC ", 0) == 0) {
+            // Tempo: ignorado nesta versão (sem relógio em LAN).
         }
-    } else {
-        // Cliente aguarda HELLO+ROLE+START+TC do host.
-        connection_->sendMessage("HELLO chess3d/1 " + myNick_);
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        bool gotRole = false;
-        while (std::chrono::steady_clock::now() < deadline) {
-            auto msg = connection_->pollIncoming();
-            if (!msg) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); continue; }
-            if (msg->rfind("HELLO ", 0) == 0) {
-                const std::size_t sp = msg->find(' ', 6);
-                opponentNick_ = (sp != std::string::npos) ? msg->substr(sp + 1) : "host";
-                spdlog::info("LAN: host identificado como '{}'", opponentNick_);
-            } else if (msg->rfind("ROLE ", 0) == 0) {
-                const std::string role = msg->substr(5);
-                // ROLE = COR DO CLIENTE; humanColor_ = minha cor.
-                humanColor_ = (role == "WHITE") ? chess::Color::White : chess::Color::Black;
-                remoteColor_ = (humanColor_ == chess::Color::White) ? chess::Color::Black
-                                                                    : chess::Color::White;
-                gotRole = true;
-            } else if (msg->rfind("START ", 0) == 0) {
-                // Recebemos posição inicial — já é standard, ignora FEN alternativo por ora.
-            } else if (msg->rfind("TC ", 0) == 0) {
-                // Tempo: ignorado nesta versão (sem relógio em LAN).
-                break;  // TC é a última mensagem do handshake
-            }
+    }
+
+    const bool complete = isLanHost_ ? gotPeerHello_ : (gotPeerHello_ && gotRole_);
+    if (!complete) {
+        if (std::chrono::steady_clock::now() > handshakeDeadline_
+            || !connection_->isConnected()) {
+            spdlog::error("LAN: handshake falhou — voltando ao menu");
+            backToMenu();
         }
-        if (!gotRole) {
-            spdlog::warn("LAN: handshake incompleto — sem ROLE recebido");
-        }
+        return;  // segue aguardando no próximo frame
     }
 
     // ── Transição Lobby → Playing ──────────────────────────────────────────

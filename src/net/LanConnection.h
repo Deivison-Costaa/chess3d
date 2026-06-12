@@ -29,9 +29,10 @@ public:
     // Chame em modo host: antes de mostrar o Lobby.
     bool startListening(uint16_t port);
 
-    // Conecta ao host:port de forma bloqueante (sem thread).
+    // Conecta ao host:port. Bloqueia até conectar, falhar, estourar timeoutMs
+    // ou close() ser chamado de outra thread (aborta em ≤~100ms).
     // Deve ser chamado de uma thread separada se não quiser congelar a UI.
-    bool connectTo(const std::string& host, uint16_t port);
+    bool connectTo(const std::string& host, uint16_t port, int timeoutMs = 10000);
 
     // Envia mensagem (thread-safe). Retorna false se não conectado.
     bool sendMessage(const std::string& payload);
@@ -67,8 +68,12 @@ private:
 
     // Sockets mantidos como intptr_t para evitar vazar headers de plataforma.
     // Win32: SOCKET (UINT_PTR); POSIX: int (-1 = inválido).
-    intptr_t listenSock_{-1};
-    intptr_t peerSock_{-1};
+    // Atômicos com posse exclusiva: quem faz exchange(invalid) e recebe um fd
+    // válido é o único responsável por fechá-lo — elimina double-close entre
+    // close() e as threads internas.
+    std::atomic<intptr_t> listenSock_{-1};
+    std::atomic<intptr_t> peerSock_{-1};
+    std::atomic<intptr_t> connectSock_{-1};  // socket com connect() em andamento
 
     uint16_t boundPort_{0};
 };

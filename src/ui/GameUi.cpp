@@ -345,7 +345,7 @@ void GameUi::renderHud(const HudData& data) {
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                  ImGuiWindowFlags_NoFocusOnAppearing);
     if (ImGui::Button("Menu", ImVec2(90, 32))) {
-        if (onBackToMenu_) onBackToMenu_();
+        if (onOpenPauseMenu_) onOpenPauseMenu_();
     }
     ImGui::SameLine();
     // Desfazer: oculto em IA vs IA e em LAN (exigiria handshake com o oponente).
@@ -356,7 +356,7 @@ void GameUi::renderHud(const HudData& data) {
 
     // ── Painel inferior central (só em IA vs IA): pause + velocidade ────
     if (data.aiVsAi) {
-        constexpr float pbW = 360.0f, pbH = 70.0f;
+        constexpr float pbW = 360.0f, pbH = 96.0f;
         ImGui::SetNextWindowPos(ImVec2((vp.x - pbW) * 0.5f, vp.y - pbH - 12.0f), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(pbW, pbH), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(0.75f);
@@ -382,13 +382,43 @@ void GameUi::renderHud(const HudData& data) {
             if (on) ImGui::PopStyleColor();
             ImGui::SameLine();
         }
-        // Mostra quem joga de cada lado.
+        // Mostra quem joga de cada lado, com as mesmas cores dos cards do menu.
         ImGui::NewLine();
-        ImGui::TextDisabled("%s (B) vs %s (P)",
-                            data.whiteAgentName.c_str(),
-                            data.blackAgentName.c_str());
+        ImGui::TextColored(ImVec4(0.95f, 0.92f, 0.85f, 1.0f),
+                           "Brancas: %s", data.whiteAgentName.c_str());
+        ImGui::TextColored(ImVec4(0.62f, 0.62f, 0.68f, 1.0f),
+                           "Pretas:  %s", data.blackAgentName.c_str());
         ImGui::End();
     }
+}
+
+void GameUi::renderPauseMenu(bool lanMode) {
+    // Escurece a cena atrás do overlay.
+    const ImVec2 vp = ImGui::GetMainViewport()->Size;
+    ImGui::GetBackgroundDrawList()->AddRectFilled(ImVec2(0.0f, 0.0f), vp,
+                                                  IM_COL32(0, 0, 0, 110));
+
+    centerNextWindow(320.0f, lanMode ? 260.0f : 230.0f);
+    ImGui::Begin("Pausa", nullptr,
+                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_NoMove);
+    ImGui::Spacing();
+    if (ImGui::Button("Voltar à partida", ImVec2(288, 40))) {
+        if (onResume_) onResume_();
+    }
+    ImGui::Spacing();
+    if (ImGui::Button("Menu principal", ImVec2(288, 40))) {
+        if (onBackToMenu_) onBackToMenu_();
+    }
+    ImGui::Spacing();
+    if (ImGui::Button("Sair do jogo", ImVec2(288, 40))) {
+        if (onExit_) onExit_();
+    }
+    if (lanMode) {
+        ImGui::Spacing();
+        ImGui::TextDisabled("O oponente e o jogo não pausam em rede.");
+    }
+    ImGui::End();
 }
 
 void GameUi::renderEndGame(chess::GameResult result, int totalPlies) {
@@ -413,7 +443,8 @@ void GameUi::renderEndGame(chess::GameResult result, int totalPlies) {
     ImGui::End();
 }
 
-void GameUi::renderDebugPanel(const ai::SearchInfo& info, const std::string& agentName) {
+void GameUi::renderDebugPanel(const ai::SearchInfo& info, const std::string& agentName,
+                              chess::Color agentSide) {
     if (!showDebug_) return;
     ImGui::SetNextWindowPos(ImVec2(280.0f, 12.0f), ImGuiCond_Appearing);
     ImGui::SetNextWindowSize(ImVec2(360.0f, 380.0f), ImGuiCond_Appearing);
@@ -422,7 +453,7 @@ void GameUi::renderDebugPanel(const ai::SearchInfo& info, const std::string& age
                  ImGuiWindowFlags_NoFocusOnAppearing);
     ImGui::TextDisabled("Teclas: F4=view G=degamma L=normal T=PBR P=diag");
     ImGui::Separator();
-    ImGui::Text("Agente: %s", agentName.c_str());
+    ImGui::Text("Agente: %s (%s)", agentName.c_str(), colorLabel(agentSide));
     ImGui::Separator();
     ImGui::Text("Depth alcancado: %d", info.depthReached);
     ImGui::Text("Nos explorados: %llu", static_cast<unsigned long long>(info.nodesVisited));

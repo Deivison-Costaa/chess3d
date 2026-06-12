@@ -152,3 +152,61 @@ TEST_CASE("LanConnection pollIncoming returns nullopt when queue empty", "[lan]"
     auto msg = conn.pollIncoming();
     REQUIRE_FALSE(msg.has_value());
 }
+
+TEST_CASE("LanConnection close aborts in-flight connectTo quickly", "[lan]") {
+    LanConnection conn;
+
+    // IP de teste não-roteável (RFC 5737): connect fica pendente até abortarmos.
+    bool result = true;
+    std::thread t([&] { result = conn.connectTo("192.0.2.1", 65000); });
+
+    std::this_thread::sleep_for(100ms);
+    const auto t0 = std::chrono::steady_clock::now();
+    conn.close();
+    t.join();
+    const auto elapsed = std::chrono::steady_clock::now() - t0;
+
+    REQUIRE_FALSE(result);
+    REQUIRE_FALSE(conn.isConnected());
+    REQUIRE(elapsed < 1000ms);  // antes do fix, join travava por minutos
+}
+
+TEST_CASE("LanConnection connectTo honours timeout", "[lan]") {
+    LanConnection conn;
+
+    const auto t0 = std::chrono::steady_clock::now();
+    const bool result = conn.connectTo("192.0.2.1", 65000, 300);
+    const auto elapsed = std::chrono::steady_clock::now() - t0;
+
+    REQUIRE_FALSE(result);
+    REQUIRE(elapsed < 2000ms);
+    conn.close();
+}
+
+TEST_CASE("LanConnection close cancels pending listen without crash", "[lan]") {
+    LanConnection conn;
+    REQUIRE(conn.startListening(kBasePort + 5));
+    std::this_thread::sleep_for(50ms);
+
+    const auto t0 = std::chrono::steady_clock::now();
+    conn.close();
+    const auto elapsed = std::chrono::steady_clock::now() - t0;
+
+    REQUIRE(elapsed < 1000ms);
+    SUCCEED("listen cancelado sem travar nem crashar");
+}
+
+TEST_CASE("LanConnection port is reusable after cancelled listen", "[lan]") {
+    const uint16_t port = kBasePort + 6;
+    {
+        LanConnection first;
+        REQUIRE(first.startListening(port));
+        std::this_thread::sleep_for(50ms);
+        first.close();
+    }
+    // Antes do fix, o double-close do fd podia fechar um fd alheio; aqui só
+    // garantimos que reabrir a mesma porta funciona após o cancelamento.
+    LanConnection second;
+    REQUIRE(second.startListening(port));
+    second.close();
+}

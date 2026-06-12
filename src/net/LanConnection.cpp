@@ -2,7 +2,9 @@
 
 #include <spdlog/spdlog.h>
 
+#include <chrono>
 #include <cstring>
+#include <initializer_list>
 
 // ─── Platform abstraction ─────────────────────────────────────────────────────
 
@@ -24,6 +26,33 @@ inline int  sockRecv(SockT s, void* buf, int len)
 inline int  sockSend(SockT s, const void* buf, int len)
     { return send(s, reinterpret_cast<const char*>(buf), len, 0); }
 inline int  sockError() { return WSAGetLastError(); }
+inline bool sockSetNonBlocking(SockT s, bool nb) {
+    u_long mode = nb ? 1 : 0;
+    return ioctlsocket(s, FIONBIO, &mode) == 0;
+}
+// 1 = pronto, 0 = timeout, -1 = erro.
+inline int sockPollIn(SockT s, int timeoutMs) {
+    WSAPOLLFD p{ s, POLLRDNORM, 0 };
+    const int n = WSAPoll(&p, 1, timeoutMs);
+    if (n < 0) return -1;
+    if (n == 0) return 0;
+    if (p.revents & (POLLERR | POLLNVAL)) return -1;
+    return 1;
+}
+inline int sockPollOut(SockT s, int timeoutMs) {
+    WSAPOLLFD p{ s, POLLWRNORM, 0 };
+    const int n = WSAPoll(&p, 1, timeoutMs);
+    if (n < 0) return -1;
+    if (n == 0) return 0;
+    if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) return -1;
+    return 1;
+}
+inline bool sockConnectInProgress() { return WSAGetLastError() == WSAEWOULDBLOCK; }
+inline int  sockPendingError(SockT s) {
+    int err = 0; int len = sizeof(err);
+    getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len);
+    return err;
+}
 
 struct WsaGuard {
     WsaGuard()  { WSADATA d{}; WSAStartup(MAKEWORD(2,2), &d); }
@@ -36,9 +65,11 @@ static WsaGuard g_wsa;
 #  include <arpa/inet.h>
 #  include <csignal>
 #  include <errno.h>
+#  include <fcntl.h>
 #  include <netdb.h>
 #  include <netinet/in.h>
 #  include <netinet/tcp.h>
+#  include <poll.h>
 #  include <sys/socket.h>
 #  include <sys/types.h>
 #  include <unistd.h>
@@ -53,6 +84,34 @@ inline int  sockRecv(SockT s, void* buf, int len)
 inline int  sockSend(SockT s, const void* buf, int len)
     { return static_cast<int>(::send(s, buf, static_cast<std::size_t>(len), 0)); }
 inline int  sockError() { return errno; }
+inline bool sockSetNonBlocking(SockT s, bool nb) {
+    const int fl = fcntl(s, F_GETFL, 0);
+    if (fl < 0) return false;
+    return fcntl(s, F_SETFL, nb ? (fl | O_NONBLOCK) : (fl & ~O_NONBLOCK)) == 0;
+}
+// 1 = pronto, 0 = timeout, -1 = erro.
+inline int sockPollIn(SockT s, int timeoutMs) {
+    pollfd p{ s, POLLIN, 0 };
+    const int n = ::poll(&p, 1, timeoutMs);
+    if (n < 0) return (errno == EINTR) ? 0 : -1;
+    if (n == 0) return 0;
+    if (p.revents & (POLLERR | POLLNVAL)) return -1;
+    return 1;
+}
+inline int sockPollOut(SockT s, int timeoutMs) {
+    pollfd p{ s, POLLOUT, 0 };
+    const int n = ::poll(&p, 1, timeoutMs);
+    if (n < 0) return (errno == EINTR) ? 0 : -1;
+    if (n == 0) return 0;
+    if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) return -1;
+    return 1;
+}
+inline bool sockConnectInProgress() { return errno == EINPROGRESS; }
+inline int  sockPendingError(SockT s) {
+    int err = 0; socklen_t len = sizeof(err);
+    getsockopt(s, SOL_SOCKET, SO_ERROR, &err, &len);
+    return err;
+}
 
 struct SigPipeGuard {
     SigPipeGuard() { signal(SIGPIPE, SIG_IGN); }
@@ -129,21 +188,37 @@ bool LanConnection::startListening(uint16_t port) {
     getsockname(ls, reinterpret_cast<sockaddr*>(&boundAddr), &boundLen);
     boundPort_ = ntohs(boundAddr.sin_port);
 
-    listenSock_ = fromSock(ls);
+    // Accept não-bloqueante com poll: close() só precisa setar stop_ e a thread
+    // sai em ≤~100ms — sem depender da semântica frágil de "fechar fd acorda accept".
+    sockSetNonBlocking(ls, true);
+    listenSock_.store(fromSock(ls));
     spdlog::info("LanConnection: escutando em porta {}", boundPort_);
 
-    // Accept em background para não congelar a UI.
-    acceptThread_ = std::thread([this, ls]() {
+    acceptThread_ = std::thread([this]() {
+        SockT peer = kInvalidSock;
         sockaddr_in clientAddr{};
-        socklen_t   clientLen = sizeof(clientAddr);
-        SockT peer = ::accept(ls, reinterpret_cast<sockaddr*>(&clientAddr), &clientLen);
-        sockClose(ls);  // fecha o listen socket após aceitar 1 cliente
-        listenSock_ = fromSock(kInvalidSock);
-
-        if (!sockValid(peer) || stop_.load()) {
-            if (sockValid(peer)) sockClose(peer);
-            return;
+        while (!stop_.load()) {
+            const SockT cur = toSock(listenSock_.load());
+            if (!sockValid(cur)) break;
+            const int r = sockPollIn(cur, 100);
+            if (r < 0) break;
+            if (r == 0) continue;
+            socklen_t clientLen = sizeof(clientAddr);
+            peer = ::accept(cur, reinterpret_cast<sockaddr*>(&clientAddr), &clientLen);
+            if (sockValid(peer)) break;
+            if (stop_.load()) break;
+            // EAGAIN (poll espúrio) ou erro transitório: tenta de novo.
         }
+
+        // Fecha o listen socket apenas se ainda formos os donos (close() pode tê-lo levado).
+        const SockT owned = toSock(listenSock_.exchange(fromSock(kInvalidSock)));
+        if (sockValid(owned)) sockClose(owned);
+
+        if (!sockValid(peer)) return;
+        if (stop_.load()) { sockClose(peer); return; }
+
+        // No Windows o socket aceito herda o modo não-bloqueante do listen.
+        sockSetNonBlocking(peer, false);
         int noDelay = 1;
         setsockopt(peer, IPPROTO_TCP, TCP_NODELAY,
                    reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
@@ -152,44 +227,76 @@ bool LanConnection::startListening(uint16_t port) {
         inet_ntop(AF_INET, &clientAddr.sin_addr, ipBuf, sizeof(ipBuf));
         spdlog::info("LanConnection: cliente conectado de {}", ipBuf);
 
-        peerSock_ = fromSock(peer);
+        peerSock_.store(fromSock(peer));
         connected_.store(true);
         readerLoop();
     });
     return true;
 }
 
-bool LanConnection::connectTo(const std::string& host, uint16_t port) {
+bool LanConnection::connectTo(const std::string& host, uint16_t port, int timeoutMs) {
     SockT s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (!sockValid(s)) {
         spdlog::error("LanConnection: socket() failed ({})", sockError());
         return false;
     }
 
+    // AI_NUMERICHOST primeiro (caso de uso é IP literal — não bloqueia em DNS);
+    // fallback com resolução completa se não for um IP.
     addrinfo hints{}, *res = nullptr;
     hints.ai_family   = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags    = AI_NUMERICHOST;
     const std::string portStr = std::to_string(port);
     if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &res) != 0 || !res) {
-        spdlog::error("LanConnection: getaddrinfo({}) failed ({})", host, sockError());
-        sockClose(s);
-        return false;
+        hints.ai_flags = 0;
+        if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &res) != 0 || !res) {
+            spdlog::error("LanConnection: getaddrinfo({}) failed ({})", host, sockError());
+            sockClose(s);
+            return false;
+        }
     }
 
-    if (::connect(s, res->ai_addr, static_cast<int>(res->ai_addrlen)) < 0) {
-        spdlog::error("LanConnection: connect({}:{}) failed ({})", host, port, sockError());
-        freeaddrinfo(res);
-        sockClose(s);
-        return false;
-    }
+    // Connect não-bloqueante: publica o fd em connectSock_ ANTES, para close()
+    // poder abortar de outra thread (fecha o fd → poll retorna erro).
+    sockSetNonBlocking(s, true);
+    connectSock_.store(fromSock(s));
+
+    const int rc = ::connect(s, res->ai_addr, static_cast<int>(res->ai_addrlen));
     freeaddrinfo(res);
 
+    bool ok = (rc == 0);
+    if (!ok && sockConnectInProgress()) {
+        const auto deadline = std::chrono::steady_clock::now()
+                            + std::chrono::milliseconds(timeoutMs);
+        while (!stop_.load()) {
+            if (std::chrono::steady_clock::now() >= deadline) break;
+            const int r = sockPollOut(s, 100);  // fatias de 100ms re-checam stop_
+            if (r < 0) break;
+            if (r == 0) continue;
+            ok = (sockPendingError(s) == 0);
+            break;
+        }
+    }
+
+    // Handoff de posse: se close() já levou o fd, ele já o fechou — não fechar de novo.
+    if (connectSock_.exchange(fromSock(kInvalidSock)) == fromSock(kInvalidSock)) {
+        spdlog::info("LanConnection: connect a {}:{} abortado", host, port);
+        return false;
+    }
+    if (!ok || stop_.load()) {
+        spdlog::error("LanConnection: connect({}:{}) failed ({})", host, port, sockError());
+        sockClose(s);
+        return false;
+    }
+
+    sockSetNonBlocking(s, false);  // readerLoop usa recv bloqueante
     int noDelay = 1;
     setsockopt(s, IPPROTO_TCP, TCP_NODELAY,
                reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
 
     spdlog::info("LanConnection: conectado a {}:{}", host, port);
-    peerSock_ = fromSock(s);
+    peerSock_.store(fromSock(s));
     connected_.store(true);
 
     readerThread_ = std::thread(&LanConnection::readerLoop, this);
@@ -216,11 +323,13 @@ void LanConnection::close() {
     stop_.store(true);
     connected_.store(false);
 
-    // Fecha sockets para desbloquear recv() e accept() nas threads.
-    const SockT ls = toSock(listenSock_);
-    if (sockValid(ls)) { sockClose(ls); listenSock_ = fromSock(kInvalidSock); }
-    const SockT ps = toSock(peerSock_);
-    if (sockValid(ps)) { sockClose(ps); peerSock_ = fromSock(kInvalidSock); }
+    // Toma posse e fecha cada socket (exchange garante fechamento único mesmo
+    // com as threads internas correndo em paralelo). Fechar o peer desbloqueia
+    // o recv() do readerLoop; connect/accept saem pelo stop_ via poll.
+    for (std::atomic<intptr_t>* sock : { &connectSock_, &listenSock_, &peerSock_ }) {
+        const SockT s = toSock(sock->exchange(fromSock(kInvalidSock)));
+        if (sockValid(s)) sockClose(s);
+    }
 
     if (acceptThread_.joinable()) acceptThread_.join();
     if (readerThread_.joinable()) readerThread_.join();
@@ -247,7 +356,7 @@ std::string LanConnection::localIp() const {
 }
 
 bool LanConnection::sendRaw(const void* data, int len) {
-    const SockT s = toSock(peerSock_);
+    const SockT s = toSock(peerSock_.load());
     if (!sockValid(s)) return false;
     int sent = 0;
     while (sent < len) {
@@ -259,7 +368,7 @@ bool LanConnection::sendRaw(const void* data, int len) {
 }
 
 bool LanConnection::recvExact(void* buf, int len) {
-    const SockT s = toSock(peerSock_);
+    const SockT s = toSock(peerSock_.load());
     if (!sockValid(s)) return false;
     int received = 0;
     while (received < len) {

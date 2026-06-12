@@ -146,7 +146,8 @@ void InputHandler::keyThunk(GLFWwindow* w, int key, int sc, int action, int mods
                           || key == GLFW_KEY_7  || key == GLFW_KEY_8 || key == GLFW_KEY_9
                           || key == GLFW_KEY_R  || key == GLFW_KEY_F
                           || key == GLFW_KEY_1  || key == GLFW_KEY_2
-                          || key == GLFW_KEY_G  || key == GLFW_KEY_L);
+                          || key == GLFW_KEY_G  || key == GLFW_KEY_L
+                          || key == GLFW_KEY_ESCAPE);
     if (!isDebugKey && ImGui::GetIO().WantCaptureKeyboard) return;
     if (auto* self = static_cast<InputHandler*>(glfwGetWindowUserPointer(w))) {
         self->onKey(key, sc, action, mods);
